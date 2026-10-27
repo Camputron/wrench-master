@@ -1,19 +1,38 @@
-import { app, shell, BrowserWindow } from 'electron'
+import { app, shell, BrowserWindow, dialog, Menu, nativeTheme } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
-import { createRepos, type Repos } from './db'
+import { ZOOM_LEVELS, type Settings } from '../shared/types'
 import { registerIpc } from './ipc'
+import { importFromJavaApp } from './legacyImport'
+import { buildMenu } from './menu'
+import { emit, Services } from './services'
 
-let repos: Repos | undefined
+let services: Services
+
+/** Applies theme and interface size to every window, and tells the renderer. */
+function applySettings(settings: Settings): void {
+  // The renderer follows prefers-color-scheme, which tracks nativeTheme.themeSource.
+  nativeTheme.themeSource = settings.theme
+  for (const win of BrowserWindow.getAllWindows()) win.webContents.setZoomFactor(settings.zoom)
+  emit('settings-changed', settings)
+}
+
+function stepZoom(step: 1 | -1 | 0): void {
+  const levels: readonly number[] = ZOOM_LEVELS
+  const i = levels.indexOf(services.settings.get().zoom)
+  const next = step === 0 ? 1 : levels[Math.min(levels.length - 1, Math.max(0, (i < 0 ? levels.indexOf(1) : i) + step))]
+  services.settings.update({ zoom: next })
+}
 
 function createWindow(): void {
   // Create the browser window.
   const mainWindow = new BrowserWindow({
-    width: 900,
-    height: 670,
+    width: 1200,
+    height: 800,
+    minWidth: 800,
+    minHeight: 600,
     show: false,
-    autoHideMenuBar: true,
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -23,6 +42,27 @@ function createWindow(): void {
 
   mainWindow.on('ready-to-show', () => {
     mainWindow.show()
+  })
+
+  mainWindow.webContents.on('did-finish-load', () => {
+    mainWindow.webContents.setZoomFactor(services.settings.get().zoom)
+  })
+
+  let closeConfirmed = false
+  mainWindow.on('close', (event) => {
+    if (closeConfirmed || !services.settings.get().confirmExit) return
+    event.preventDefault()
+    const choice = dialog.showMessageBoxSync(mainWindow, {
+      type: 'question',
+      message: `Quit ${app.name}?`,
+      buttons: ['Quit', 'Cancel'],
+      defaultId: 0,
+      cancelId: 1
+    })
+    if (choice === 0) {
+      closeConfirmed = true
+      app.quit()
+    }
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -44,7 +84,7 @@ function createWindow(): void {
 // Some APIs can only be used after this event occurs.
 app.whenReady().then(() => {
   // Set app user model id for windows
-  electronApp.setAppUserModelId('com.electron')
+  electronApp.setAppUserModelId('com.camposmdev.wrenchmaster')
 
   // Default open or close DevTools by F12 in development
   // and ignore CommandOrControl + R in production.
@@ -53,8 +93,20 @@ app.whenReady().then(() => {
     optimizer.watchWindowShortcuts(window)
   })
 
-  repos = createRepos(join(app.getPath('userData'), 'autoshop.db'))
-  registerIpc(repos)
+  services = new Services(app.getPath('userData'), applySettings)
+  nativeTheme.themeSource = services.settings.get().theme
+  registerIpc(services)
+
+  Menu.setApplicationMenu(
+    buildMenu({
+      send: (action) => emit('menu', action),
+      zoom: stepZoom,
+      importFromJavaApp: () => {
+        const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
+        if (win) void importFromJavaApp(win, services)
+      }
+    })
+  )
 
   createWindow()
 
@@ -75,8 +127,5 @@ app.on('window-all-closed', () => {
 })
 
 app.on('will-quit', () => {
-  repos?.db.close()
+  services?.close()
 })
-
-// In this file you can include the rest of your app"s specific main process
-// code. You can also put them in separate files and require them here.

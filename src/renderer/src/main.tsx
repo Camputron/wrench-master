@@ -1,15 +1,11 @@
 import './assets/main.css'
 
-import React from 'react'
-import ReactDOM from 'react-dom/client'
+import { StrictMode } from 'react'
+import { createRoot } from 'react-dom/client'
 import App from './App'
-import { NextUIProvider } from '@nextui-org/react'
 
-const root = document.getElementById('root') as HTMLElement
-ReactDOM.createRoot(root).render(
-  <React.StrictMode>
-    <NextUIProvider>
-        <App />
-    </NextUIProvider>
-  </React.StrictMode>
+createRoot(document.getElementById('root') as HTMLElement).render(
+  <StrictMode>
+    <App />
+  </StrictMode>
 )

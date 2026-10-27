@@ -142,3 +142,49 @@ export interface MonthlyIncome {
   /** Total billed for work orders completed this month */
   actual: number
 }
+
+export type Theme = 'light' | 'dark' | 'system'
+
+/** Interface size options, as Electron zoom factors. */
+export const ZOOM_LEVELS = [0.9, 1, 1.1, 1.25, 1.5] as const
+
+/** The shop's details, printed on invoices. */
+export interface ShopInfo {
+  company: string
+  street: string
+  city: string
+  state: string
+  zip: string
+  phone: string
+  repairShopId: string
+  invoiceTitle: string
+}
+
+export interface Settings {
+  shop: ShopInfo
+  /** Default hourly labor rate */
+  laborRate: number
+  /** Default sales tax rate for new work orders, as a fraction */
+  taxRate: number
+  theme: Theme
+  /** One of ZOOM_LEVELS */
+  zoom: number
+  /** Ask before closing the window */
+  confirmExit: boolean
+}
+
+export type SettingsPatch = Partial<Omit<Settings, 'shop'>> & { shop?: Partial<ShopInfo> }
+
+export type Page = 'dashboard' | 'customers' | 'workOrders'
+
+/** Native menu commands the renderer handles. */
+export type MenuAction = { type: 'navigate'; page: Page } | { type: 'preferences' } | { type: 'about' }
+
+export interface AppInfo {
+  name: string
+  version: string
+  electron: string
+  chrome: string
+  node: string
+  databasePath: string
+}

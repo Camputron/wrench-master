@@ -1,48 +1,48 @@
-import { Navbar, NavbarContent, NavbarBrand, NavbarItem, Link, DropdownTrigger, Avatar, Dropdown } from '@nextui-org/react'
-import AvatarDropdownMenu from './AvatarDropdownMenu'
-import { useState } from 'react'
+import { Wrench } from '@gravity-ui/icons'
+import { Tabs } from '@heroui/react'
+import type { Page, ShopInfo } from '../../../shared/types'
+import AvatarDropdownMenu, { type AvatarMenuAction } from './AvatarDropdownMenu'
 
-function AcmeLogo(): JSX.Element {
-  return (
-    <svg fill="none" height="36" viewBox="0 0 32 32" width="36">
-      <path clipRule="evenodd" d="M17.6482 10.1305L15.8785 7.02583L7.02979 22.5499H10.5278L17.6482 10.1305ZM19.8798 14.0457L18.11 17.1983L19.394 19.4511H16.8453L15.1056 22.5499H24.7272L19.8798 14.0457Z" fill="currentColor" fillRule="evenodd" />
-    </svg>
-  )
+export const PAGES: { id: Page; label: string }[] = [
+  { id: 'dashboard', label: 'Dashboard' },
+  { id: 'customers', label: 'Customers' },
+  { id: 'workOrders', label: 'Work Orders' }
+]
+
+interface Props {
+  page: Page
+  onPageChange: (page: Page) => void
+  shop: ShopInfo | undefined
+  onMenuAction: (action: AvatarMenuAction) => void
 }
 
-export default function AppBar(): JSX.Element {
-  const items = ["Dashboard", "Customers", "Work Orders"]
-  const [selectedItem, setSelectedItem] = useState(items[0])
-  const onLinkClicked: React.MouseEventHandler<HTMLAnchorElement> = (event): void => {
-    setSelectedItem(event.currentTarget.innerText)
-    console.info(`switch to ${event.currentTarget.innerText} ui`)
-  }
-
+/**
+ * Top bar with the page tabs. The page itself is rendered by the caller, outside `<Tabs>`:
+ * react-aria renders a Tabs subtree twice to collect its items, which would mount pages and
+ * open dialogs twice.
+ */
+export default function AppBar({ page, onPageChange, shop, onMenuAction }: Props): React.ReactElement {
   return (
-    <Navbar isBordered>
-      <NavbarContent justify="start">
-        <NavbarBrand>
-          <AcmeLogo />
-          <p className="font-bold text-inherit">Wrench Master</p>
-        </NavbarBrand>
-      </NavbarContent>
-      <NavbarContent justify="center">
-        {items.map((str, i) => (
-          <NavbarItem key={`${str}-${i}`}>
-            <Link color={selectedItem === str ? 'primary' : 'foreground'} onClick={onLinkClicked}>
-              {str}
-            </Link>
-          </NavbarItem>
-        ))}
-      </NavbarContent>
-      <NavbarContent as="div" justify="end">
-        <Dropdown placement="bottom-end">
-          <DropdownTrigger>
-            <Avatar isBordered as="button" className="transition-transform" size="sm" />
-          </DropdownTrigger>
-          <AvatarDropdownMenu/>
-        </Dropdown>
-      </NavbarContent>
-    </Navbar>
+    <header className="sticky top-0 z-40 flex h-14 shrink-0 items-center gap-6 border-b border-separator bg-background/80 px-4 backdrop-blur-lg">
+      <div className="flex items-center gap-2">
+        <Wrench className="size-5 text-accent" />
+        <p className="font-bold">Wrench Master</p>
+      </div>
+      <Tabs selectedKey={page} onSelectionChange={(key) => onPageChange(key as Page)}>
+        <Tabs.ListContainer>
+          <Tabs.List aria-label="Pages">
+            {PAGES.map(({ id, label }) => (
+              <Tabs.Tab key={id} id={id} className="whitespace-nowrap">
+                {label}
+                <Tabs.Indicator />
+              </Tabs.Tab>
+            ))}
+          </Tabs.List>
+        </Tabs.ListContainer>
+      </Tabs>
+      <div className="ml-auto">
+        <AvatarDropdownMenu shop={shop} onAction={onMenuAction} />
+      </div>
+    </header>
   )
 }

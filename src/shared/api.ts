@@ -1,4 +1,4 @@
-import type { Customer, CustomerFilter, CustomerSuggestions, MonthlyIncome, PartSuggestion, Vehicle, VehicleFilter, VehicleSuggestions, WorkOrder, WorkOrderFilter, WorkOrderStats } from './types'
+import type { AppInfo, Customer, CustomerFilter, CustomerSuggestions, MenuAction, MonthlyIncome, PartSuggestion, Settings, SettingsPatch, Vehicle, VehicleFilter, VehicleSuggestions, WorkOrder, WorkOrderFilter, WorkOrderStats } from './types'
 
 /**
  * The API the preload script exposes to the renderer as `window.api`.
@@ -44,6 +44,36 @@ export interface Api {
     years(): Promise<number[]>
     incomeByMonth(year: number): Promise<MonthlyIncome[]>
   }
+  settings: {
+    get(): Promise<Settings>
+    /** Merges the patch into the saved settings. Invalid values are ignored. Resolves to the new settings. */
+    update(patch: SettingsPatch): Promise<Settings>
+  }
+  session: {
+    /** Up to 10 most recently saved work orders, newest first. */
+    recentWorkOrders(): Promise<WorkOrder[]>
+    /** Work orders that were open in the editor, to reopen on launch. */
+    openWorkOrderIds(): Promise<number[]>
+    setOpenWorkOrderIds(ids: number[]): Promise<void>
+  }
+  app: {
+    info(): Promise<AppInfo>
+  }
+}
+
+/** Events the main process sends to the renderer. Subscribe with `window.events.on(name, listener)`. */
+export interface AppEvents {
+  'settings-changed': Settings
+  menu: MenuAction
+  /** The database was replaced (e.g. by an import); reload anything shown. */
+  'data-changed': null
+}
+
+export const EVENT_CHANNEL_PREFIX = 'event:'
+
+export interface Events {
+  /** Returns a function that removes the listener. */
+  on<K extends keyof AppEvents>(name: K, listener: (payload: AppEvents[K]) => void): () => void
 }
 
 /**
@@ -66,7 +96,10 @@ export const API_METHODS: { [N in keyof Api]: Record<keyof Api[N], true> } = {
     stats: true,
     years: true,
     incomeByMonth: true
-  }
+  },
+  settings: { get: true, update: true },
+  session: { recentWorkOrders: true, openWorkOrderIds: true, setOpenWorkOrderIds: true },
+  app: { info: true }
 }
 
 /** Main-process implementation of `Api`: same methods, but may return values directly. */
