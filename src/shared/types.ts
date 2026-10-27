@@ -178,7 +178,7 @@ export type SettingsPatch = Partial<Omit<Settings, 'shop'>> & { shop?: Partial<S
 export type Page = 'dashboard' | 'customers' | 'workOrders'
 
 /** Native menu commands the renderer handles. */
-export type MenuAction = { type: 'navigate'; page: Page } | { type: 'preferences' } | { type: 'about' }
+export type MenuAction = { type: 'navigate'; page: Page } | { type: 'newCustomer' } | { type: 'preferences' } | { type: 'about' }
 
 export interface AppInfo {
   name: string
@@ -188,3 +188,13 @@ export interface AppInfo {
   node: string
   databasePath: string
 }
+
+/** Result of decoding a VIN with NHTSA's vPIC service. */
+export type VinDecodeResult =
+  | {
+      ok: true
+      vehicle: Pick<VehicleInfo, 'year' | 'make' | 'model' | 'engine' | 'transmission'>
+      /** Set when NHTSA decoded the VIN but flagged a problem, e.g. a bad check digit. */
+      warning?: string
+    }
+  | { ok: false; error: string }

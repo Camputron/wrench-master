@@ -2,6 +2,7 @@ import { app, ipcMain } from 'electron'
 import type { ApiHandlers } from '../shared/api'
 import type { WorkOrder } from '../shared/types'
 import type { Services } from './services'
+import { decodeVin } from './vin'
 
 export function createHandlers(services: Services): ApiHandlers {
   // Read repos on every call: importing a database replaces them.
@@ -12,6 +13,7 @@ export function createHandlers(services: Services): ApiHandlers {
       get: (id) => db().customers.getById(id),
       list: (limit) => db().customers.list(limit),
       filter: (f) => db().customers.filter(f),
+      search: (query, limit) => db().customers.search(query, limit),
       create: (c) => db().customers.create(c),
       update: (c) => db().customers.update(c),
       delete: (id) => db().customers.delete(id),
@@ -24,7 +26,8 @@ export function createHandlers(services: Services): ApiHandlers {
       create: (v) => db().vehicles.create(v),
       update: (v) => db().vehicles.update(v),
       delete: (id) => db().vehicles.delete(id),
-      suggestions: () => db().vehicles.suggestions()
+      suggestions: () => db().vehicles.suggestions(),
+      decodeVin: (vin) => decodeVin(vin)
     },
     parts: {
       search: (query, limit) => db().parts.search(query, limit),

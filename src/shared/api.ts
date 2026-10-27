@@ -1,4 +1,21 @@
-import type { AppInfo, Customer, CustomerFilter, CustomerSuggestions, MenuAction, MonthlyIncome, PartSuggestion, Settings, SettingsPatch, Vehicle, VehicleFilter, VehicleSuggestions, WorkOrder, WorkOrderFilter, WorkOrderStats } from './types'
+import type {
+  AppInfo,
+  Customer,
+  CustomerFilter,
+  CustomerSuggestions,
+  MenuAction,
+  MonthlyIncome,
+  PartSuggestion,
+  Settings,
+  SettingsPatch,
+  Vehicle,
+  VehicleFilter,
+  VehicleSuggestions,
+  WorkOrder,
+  VinDecodeResult,
+  WorkOrderFilter,
+  WorkOrderStats
+} from './types'
 
 /**
  * The API the preload script exposes to the renderer as `window.api`.
@@ -9,6 +26,8 @@ export interface Api {
     get(id: number): Promise<Customer | null>
     list(limit?: number): Promise<Customer[]>
     filter(filter: CustomerFilter): Promise<Customer[]>
+    /** Customers matching every word of `query` across name, company, phone, email, and address. */
+    search(query: string, limit?: number): Promise<Customer[]>
     /** Resolves to null if an identical customer already exists. */
     create(customer: Customer): Promise<Customer | null>
     update(customer: Customer): Promise<Customer>
@@ -25,6 +44,8 @@ export interface Api {
     update(vehicle: Vehicle): Promise<Vehicle>
     delete(id: number): Promise<void>
     suggestions(): Promise<VehicleSuggestions>
+    /** Looks the VIN up with NHTSA (needs internet). */
+    decodeVin(vin: string): Promise<VinDecodeResult>
   }
   parts: {
     search(query: string, limit?: number): Promise<PartSuggestion[]>
@@ -81,8 +102,8 @@ export interface Events {
  * Typed so that adding or removing a method in `Api` without updating this list is a compile error.
  */
 export const API_METHODS: { [N in keyof Api]: Record<keyof Api[N], true> } = {
-  customers: { get: true, list: true, filter: true, create: true, update: true, delete: true, suggestions: true },
-  vehicles: { get: true, listByCustomer: true, filter: true, create: true, update: true, delete: true, suggestions: true },
+  customers: { get: true, list: true, filter: true, search: true, create: true, update: true, delete: true, suggestions: true },
+  vehicles: { get: true, listByCustomer: true, filter: true, create: true, update: true, delete: true, suggestions: true, decodeVin: true },
   parts: { search: true, remember: true },
   workOrders: {
     get: true,

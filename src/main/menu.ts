@@ -41,6 +41,8 @@ export function buildMenu(h: MenuHandlers): Menu {
     {
       label: 'File',
       submenu: [
+        { label: 'New Customer…', click: () => h.send({ type: 'newCustomer' }) },
+        { type: 'separator' },
         { label: 'Import from Autoshop Invoice Manager…', click: () => h.importFromJavaApp() },
         { type: 'separator' },
         ...(isMac ? [{ role: 'close' } satisfies MenuItemConstructorOptions] : [preferences, { type: 'separator' } satisfies MenuItemConstructorOptions, { role: 'quit', label: 'Exit' } satisfies MenuItemConstructorOptions])

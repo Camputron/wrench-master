@@ -1,6 +1,6 @@
 import type { Database } from 'better-sqlite3'
 import type { Customer, CustomerFilter, CustomerSuggestions } from '../../shared/types'
-import { prefixMatches, str } from './sql'
+import { likeEscape, prefixMatches, str } from './sql'
 
 const COLUMNS = 'customer_id, first_name, last_name, phone, email, company, address, city, state, zip'
 
@@ -53,6 +53,33 @@ export class CustomerRepo {
     ])
     const where = clauses.length ? `where ${clauses.join(' and ')}` : ''
     const rows = this.db.prepare(`select ${COLUMNS} from customer ${where} order by last_name`).all(...params) as Row[]
+    return rows.map(toCustomer)
+  }
+
+  /**
+   * Customers matching every word in `query`. A word matches the start of a first name, last name,
+   * company, email, city, or ZIP, or appears anywhere in the street or phone number (ignoring dashes).
+   * Sorted by last name, then first name.
+   */
+  search(query: string, limit = 200): Customer[] {
+    const words = query.trim().split(/\s+/).filter(Boolean)
+    const clauses: string[] = []
+    const params: unknown[] = []
+    for (const word of words) {
+      const prefix = likeEscape(word) + '%'
+      const anywhere = '%' + likeEscape(word) + '%'
+      const digits = word.replace(/\D/g, '')
+      clauses.push(
+        `(first_name like ? escape '\\' or last_name like ? escape '\\' or company like ? escape '\\' or email like ? escape '\\'
+          or city like ? escape '\\' or zip like ? escape '\\' or address like ? escape '\\'` +
+          (digits ? ` or replace(replace(replace(replace(phone, '-', ''), ' ', ''), '(', ''), ')', '') like ?` : '') +
+          ')'
+      )
+      params.push(prefix, prefix, prefix, prefix, prefix, prefix, anywhere)
+      if (digits) params.push('%' + digits + '%')
+    }
+    const where = clauses.length ? `where ${clauses.join(' and ')}` : ''
+    const rows = this.db.prepare(`select ${COLUMNS} from customer ${where} order by last_name collate nocase, first_name collate nocase limit ?`).all(...params, limit) as Row[]
     return rows.map(toCustomer)
   }
 
