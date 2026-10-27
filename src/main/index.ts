@@ -1,7 +1,11 @@
-import { app, shell, BrowserWindow, ipcMain } from 'electron'
+import { app, shell, BrowserWindow } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
+import { createRepos, type Repos } from './db'
+import { registerIpc } from './ipc'
+
+let repos: Repos | undefined
 
 function createWindow(): void {
   // Create the browser window.
@@ -49,8 +53,8 @@ app.whenReady().then(() => {
     optimizer.watchWindowShortcuts(window)
   })
 
-  // IPC test
-  ipcMain.on('ping', () => console.log('pong'))
+  repos = createRepos(join(app.getPath('userData'), 'autoshop.db'))
+  registerIpc(repos)
 
   createWindow()
 
@@ -68,6 +72,10 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit()
   }
+})
+
+app.on('will-quit', () => {
+  repos?.db.close()
 })
 
 // In this file you can include the rest of your app"s specific main process
