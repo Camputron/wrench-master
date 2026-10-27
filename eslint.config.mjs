@@ -10,6 +10,13 @@ export default defineConfig(
   // JavaScript + TypeScript rules for every process (main, preload, renderer, shared, configs)
   tseslint.configs.recommended,
 
+  // CommonJS build scripts (e.g. electron-builder hooks) use require().
+  {
+    files: ['**/*.cjs'],
+    languageOptions: { sourceType: 'commonjs' },
+    rules: { '@typescript-eslint/no-require-imports': 'off' }
+  },
+
   // React rules for the renderer only
   {
     files: ['src/renderer/**/*.{ts,tsx}'],

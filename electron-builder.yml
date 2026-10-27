@@ -1,41 +1,47 @@
 appId: com.camposmdev.wrenchmaster
 productName: Wrench Master
+copyright: Copyright © 2026 Camposm97
 directories:
   buildResources: build
 files:
-  - '!**/.vscode/*'
-  - '!src/*'
-  - '!electron.vite.config.{js,ts,mjs,cjs}'
-  - '!{.eslintignore,.eslintrc.cjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
-  - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
-  - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+  # Ship only the built app; electron-builder adds production node_modules itself.
+  - out/**/*
+  - resources/**/*
+  - package.json
+  # better-sqlite3's C/C++ sources are only for compiling; the prebuilt binary is all it needs at runtime.
+  - '!node_modules/better-sqlite3/{deps,src}/**'
 asarUnpack:
   - resources/**
+# Removes better-sqlite3 binaries for other platforms (see the file).
+afterPack: build/afterPack.cjs
 win:
   executableName: wrench-master
+  target:
+    - target: nsis
+      arch: [x64]
 nsis:
   artifactName: ${name}-${version}-setup.${ext}
   shortcutName: ${productName}
   uninstallDisplayName: ${productName}
   createDesktopShortcut: always
+  # Keep the shop's data (database, settings) if the app is uninstalled.
+  deleteAppDataOnUninstall: false
 mac:
+  category: public.app-category.business
   entitlementsInherit: build/entitlements.mac.plist
-  extendInfo:
-    - NSDocumentsFolderUsageDescription: Application requests access to the user's Documents folder.
-    - NSDownloadsFolderUsageDescription: Application requests access to the user's Downloads folder.
+  target:
+    - target: dmg
+      arch: [arm64, x64]
   notarize: false
 dmg:
-  artifactName: ${name}-${version}.${ext}
+  artifactName: ${name}-${version}-${arch}.${ext}
 linux:
   target:
     - AppImage
-    - snap
     - deb
-  maintainer: electronjs.org
-  category: Utility
+  maintainer: Camposm97
+  category: Office
 appImage:
   artifactName: ${name}-${version}.${ext}
+# better-sqlite3 ships prebuilt binaries for every platform, so nothing needs rebuilding per target.
 npmRebuild: false
-publish:
-  provider: generic
-  url: https://example.com/auto-updates

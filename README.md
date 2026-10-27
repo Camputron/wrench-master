@@ -45,6 +45,18 @@ The demo data is the same every time, with dates relative to today, so the dashb
 
 > In VS Code's integrated terminal, `ELECTRON_RUN_AS_NODE` may be set, which stops Electron from starting as an app. If `npm run dev` or these commands fail with an error about `isPackaged`, run `unset ELECTRON_RUN_AS_NODE` first.
 
+## Building installers
+
+| Command               | Output (in `dist/`)                                                          |
+| --------------------- | ---------------------------------------------------------------------------- |
+| `npm run build:win`   | `wrench-master-<version>-setup.exe` (Windows x64 installer)                  |
+| `npm run build:mac`   | `wrench-master-<version>-arm64.dmg` and `-x64.dmg` (Apple silicon and Intel) |
+| `npm run build:linux` | AppImage and `.deb`                                                          |
+
+The Windows installer can be built on a Mac. Builds aren't code-signed yet, so Windows SmartScreen and macOS Gatekeeper will warn the first time the app is opened.
+
+An installed copy keeps its data (database, settings) in `Wrench Master` in the same locations as the dev folder above, without `(Dev)`. Uninstalling doesn't delete it. To move data over from the Java version, use **File › Import from Autoshop Invoice Manager**.
+
 ## License
 
 [MIT License](LICENSE)
