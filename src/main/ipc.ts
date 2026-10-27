@@ -70,7 +70,10 @@ export function createHandlers(services: Services): ApiHandlers {
         chrome: process.versions.chrome,
         node: process.versions.node,
         databasePath: services.databasePath
-      })
+      }),
+      setUnsavedChanges: (count) => {
+        services.unsavedChanges = Number.isInteger(count) && count > 0 ? count : 0
+      }
     }
   }
 }

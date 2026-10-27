@@ -29,6 +29,8 @@ export class Services {
   readonly session: SessionStore
   /** Replaced when a database is imported, so always read it through this property. */
   repos: Repos
+  /** Open work orders with unsaved changes, as reported by the renderer. */
+  unsavedChanges = 0
 
   constructor(
     private dataDir: string,

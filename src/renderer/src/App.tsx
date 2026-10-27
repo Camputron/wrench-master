@@ -1,11 +1,14 @@
 import { Toast } from '@heroui/react'
 import { useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import type { Page } from '../../shared/types'
 import AppBar from './components/AppBar'
 import type { AvatarMenuAction } from './components/AvatarDropdownMenu'
 import AboutModal from './components/modals/AboutModal'
 import PreferencesModal from './components/modals/PreferencesModal'
+import { useEditors } from './editors/editorsContext'
+import { useSaveWorkOrder } from './editors/useSaveWorkOrder'
+import WorkOrderEditorsProvider from './editors/WorkOrderEditorsProvider'
 import { useAppEvent } from './hooks/useAppEvent'
 import { useColorScheme } from './hooks/useColorScheme'
 import { useSettings } from './hooks/useSettings'
@@ -13,11 +16,22 @@ import CustomersPage from './pages/CustomersPage'
 import DashboardPage from './pages/DashboardPage'
 import WorkOrdersPage from './pages/WorkOrdersPage'
 
-function App(): React.ReactElement {
-  useColorScheme()
+/** True when keyboard focus is in a text field, where Undo/Redo should edit the text. */
+function isEditingText(): boolean {
+  const el = document.activeElement
+  return el instanceof HTMLTextAreaElement || (el instanceof HTMLInputElement && !['checkbox', 'radio', 'button', 'submit'].includes(el.type)) || (el instanceof HTMLElement && el.isContentEditable)
+}
+
+interface ShellProps {
+  page: Page
+  setPage: (page: Page) => void
+}
+
+function Shell({ page, setPage }: ShellProps): React.ReactElement {
   const settings = useSettings()
   const queryClient = useQueryClient()
-  const [page, setPage] = useState<Page>('dashboard')
+  const editors = useEditors()
+  const saveWorkOrder = useSaveWorkOrder()
   const [modal, setModal] = useState<AvatarMenuAction | null>(null)
   /** Bumped each time Preferences opens so the form starts from the saved settings. */
   const [preferencesKey, setPreferencesKey] = useState(0)
@@ -33,6 +47,8 @@ function App(): React.ReactElement {
   const onOpenChange = (isOpen: boolean): void => {
     if (!isOpen) setModal(null)
   }
+  /** The work order editor on screen, if any. */
+  const shownEditor = page === 'workOrders' ? editors.active : null
 
   useAppEvent('menu', (action) => {
     switch (action.type) {
@@ -43,11 +59,24 @@ function App(): React.ReactElement {
         setPage('customers')
         setNewCustomerRequest((n) => n + 1)
         break
+      case 'newWorkOrder':
+        editors.newWorkOrder()
+        break
+      case 'save':
+        if (shownEditor) void saveWorkOrder(shownEditor.key)
+        break
+      case 'undo':
+      case 'redo':
+        if (isEditingText() || !shownEditor) document.execCommand(action.type)
+        else editors[action.type](shownEditor.key)
+        break
       default:
         open(action.type)
     }
   })
   useAppEvent('data-changed', () => {
+    // Open editors refer to work orders from the old database.
+    for (const e of editors.editors) editors.close(e.key)
     queryClient.clear()
     setDataVersion((v) => v + 1)
   })
@@ -64,6 +93,19 @@ function App(): React.ReactElement {
       <AboutModal isOpen={modal === 'about'} onOpenChange={onOpenChange} />
       <Toast.Provider placement="bottom end" />
     </div>
+  )
+}
+
+function App(): React.ReactElement {
+  useColorScheme()
+  const settings = useSettings()
+  const [page, setPage] = useState<Page>('dashboard')
+  const showWorkOrders = useCallback(() => setPage('workOrders'), [])
+
+  return (
+    <WorkOrderEditorsProvider defaultTaxRate={settings?.taxRate ?? 0} onShow={showWorkOrders}>
+      <Shell page={page} setPage={setPage} />
+    </WorkOrderEditorsProvider>
   )
 }
 

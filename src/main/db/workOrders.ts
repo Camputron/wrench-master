@@ -1,7 +1,7 @@
 import type { Database } from 'better-sqlite3'
 import { bill } from '../../shared/billing'
 import { PAYMENT_METHODS, type AutoPart, type Labor, type MonthlyIncome, type Payment, type PaymentMethod, type WorkOrder, type WorkOrderFilter, type WorkOrderStats } from '../../shared/types'
-import { dbDatePlusDays, fromDbDate, prefixMatches, str, toDbBool, toDbDate, today } from './sql'
+import { dbDatePlusDays, fromDbDate, likeEscape, prefixMatches, str, toDbBool, toDbDate, today } from './sql'
 
 type Row = Record<string, unknown>
 
@@ -161,6 +161,16 @@ export class WorkOrderRepo {
       ['vehicle_model', f.model]
     ])
     const args: unknown[] = params
+    for (const word of (f.text ?? '').trim().split(/\s+/).filter(Boolean)) {
+      const prefix = likeEscape(word) + '%'
+      const columns = ['customer_first_name', 'customer_last_name', 'customer_company', 'vehicle_year', 'vehicle_make', 'vehicle_model', 'vehicle_license_plate', 'vehicle_vin']
+      const id = /^#?\d+$/.test(word) ? Number(word.replace('#', '')) : null
+      clauses.push(`(${columns.map((c) => `${c} like ? escape '\\'`).join(' or ')}${id !== null ? ' or work_order_id = ?' : ''})`)
+      args.push(...columns.map(() => prefix))
+      if (id !== null) args.push(id)
+    }
+    if (f.status === 'open') clauses.push('date_completed is null')
+    if (f.status === 'completed') clauses.push('date_completed is not null')
     if (f.id && f.id > 0) {
       clauses.push('work_order_id = ?')
       args.push(f.id)

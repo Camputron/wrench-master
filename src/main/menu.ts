@@ -41,14 +41,29 @@ export function buildMenu(h: MenuHandlers): Menu {
     {
       label: 'File',
       submenu: [
+        { label: 'New Work Order', accelerator: 'CmdOrCtrl+N', click: () => h.send({ type: 'newWorkOrder' }) },
         { label: 'New Customer…', click: () => h.send({ type: 'newCustomer' }) },
+        { type: 'separator' },
+        { label: 'Save Work Order', accelerator: 'CmdOrCtrl+S', click: () => h.send({ type: 'save' }) },
         { type: 'separator' },
         { label: 'Import from Autoshop Invoice Manager…', click: () => h.importFromJavaApp() },
         { type: 'separator' },
         ...(isMac ? [{ role: 'close' } satisfies MenuItemConstructorOptions] : [preferences, { type: 'separator' } satisfies MenuItemConstructorOptions, { role: 'quit', label: 'Exit' } satisfies MenuItemConstructorOptions])
       ]
     },
-    { role: 'editMenu' },
+    {
+      label: 'Edit',
+      submenu: [
+        // Routed through the renderer: it undoes typing in a text field, or the last work order change otherwise.
+        { label: 'Undo', accelerator: 'CmdOrCtrl+Z', click: () => h.send({ type: 'undo' }) },
+        { label: 'Redo', accelerator: isMac ? 'Shift+CmdOrCtrl+Z' : 'CmdOrCtrl+Y', click: () => h.send({ type: 'redo' }) },
+        { type: 'separator' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+        { role: 'selectAll' }
+      ]
+    },
     {
       label: 'Go',
       submenu: [

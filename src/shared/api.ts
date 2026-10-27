@@ -79,6 +79,8 @@ export interface Api {
   }
   app: {
     info(): Promise<AppInfo>
+    /** Tells the main process how many open work orders have unsaved changes, so quitting can warn. */
+    setUnsavedChanges(count: number): Promise<void>
   }
 }
 
@@ -120,7 +122,7 @@ export const API_METHODS: { [N in keyof Api]: Record<keyof Api[N], true> } = {
   },
   settings: { get: true, update: true },
   session: { recentWorkOrders: true, openWorkOrderIds: true, setOpenWorkOrderIds: true },
-  app: { info: true }
+  app: { info: true, setUnsavedChanges: true }
 }
 
 /** Main-process implementation of `Api`: same methods, but may return values directly. */

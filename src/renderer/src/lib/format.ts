@@ -2,7 +2,10 @@ import { bill } from '../../../shared/billing'
 import { stateByKey } from '../../../shared/states'
 import type { Customer, VehicleInfo, WorkOrder } from '../../../shared/types'
 
-const money = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' })
+/** Number format for money fields. */
+export const MONEY: Intl.NumberFormatOptions = { style: 'currency', currency: 'USD' }
+
+const money = new Intl.NumberFormat('en-US', MONEY)
 
 export const formatMoney = (amount: number): string => money.format(amount)
 
@@ -57,4 +60,11 @@ export const isCompleteVin = (vin: string): boolean => /^[A-HJ-NPR-Z0-9]{17}$/.t
 /** A copy of `obj` with surrounding whitespace removed from every string property. */
 export function trimStrings<T extends object>(obj: T): T {
   return Object.fromEntries(Object.entries(obj).map(([k, v]) => [k, typeof v === 'string' ? v.trim() : v])) as T
+}
+
+/** Today's local date as `YYYY-MM-DD`. */
+export function todayIso(): string {
+  const d = new Date()
+  const pad = (n: number): string => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 }

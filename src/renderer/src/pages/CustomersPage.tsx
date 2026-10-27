@@ -1,13 +1,14 @@
 import { Magnifier, Persons, Plus } from '@gravity-ui/icons'
 import { Button, EmptyState, InputGroup, Spinner, Table, toast } from '@heroui/react'
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import type { Customer, Vehicle } from '../../../shared/types'
 import ConfirmDialog from '../components/ConfirmDialog'
 import CustomerDetail from '../components/customers/CustomerDetail'
 import CustomerFormModal from '../components/customers/CustomerFormModal'
 import VehicleFormModal from '../components/customers/VehicleFormModal'
 import { customerName, formatAddress, vehicleName } from '../lib/format'
+import { useDebounced } from '../hooks/useDebounced'
 import { keys } from '../lib/queryClient'
 import { EMPTY_CUSTOMER, emptyVehicle } from '../lib/records'
 
@@ -15,15 +16,6 @@ import { EMPTY_CUSTOMER, emptyVehicle } from '../lib/records'
 const LIMIT = 200
 
 type Dialog = { kind: 'customer'; customer: Customer } | { kind: 'deleteCustomer'; customer: Customer } | { kind: 'vehicle'; vehicle: Vehicle } | { kind: 'deleteVehicle'; vehicle: Vehicle }
-
-function useDebounced<T>(value: T, ms: number): T {
-  const [debounced, setDebounced] = useState(value)
-  useEffect(() => {
-    const t = setTimeout(() => setDebounced(value), ms)
-    return () => clearTimeout(t)
-  }, [value, ms])
-  return debounced
-}
 
 interface Props {
   /** Changes each time File > New Customer is chosen. */

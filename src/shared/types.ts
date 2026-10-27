@@ -102,6 +102,12 @@ export type VehicleFilter = Partial<VehicleInfo> & { customerId?: number }
 export type DateFilter = { mode: 'exactly' | 'before' | 'after'; date: IsoDate } | { mode: 'between'; from: IsoDate; to: IsoDate }
 
 export interface WorkOrderFilter {
+  /**
+   * Every word must match: a work order number, the start of the customer's first or last name or
+   * company, the vehicle's year, make, or model, or the start of the plate or VIN.
+   */
+  text?: string
+  status?: 'open' | 'completed'
   id?: number
   firstName?: string
   lastName?: string
@@ -178,7 +184,16 @@ export type SettingsPatch = Partial<Omit<Settings, 'shop'>> & { shop?: Partial<S
 export type Page = 'dashboard' | 'customers' | 'workOrders'
 
 /** Native menu commands the renderer handles. */
-export type MenuAction = { type: 'navigate'; page: Page } | { type: 'newCustomer' } | { type: 'preferences' } | { type: 'about' }
+export type MenuAction =
+  | { type: 'navigate'; page: Page }
+  | { type: 'newCustomer' }
+  | { type: 'newWorkOrder' }
+  | { type: 'save' }
+  /** Edit > Undo/Redo: the renderer undoes typing in a text field, or the last work order change otherwise. */
+  | { type: 'undo' }
+  | { type: 'redo' }
+  | { type: 'preferences' }
+  | { type: 'about' }
 
 export interface AppInfo {
   name: string

@@ -50,13 +50,15 @@ function createWindow(): void {
 
   let closeConfirmed = false
   mainWindow.on('close', (event) => {
-    if (closeConfirmed || !services.settings.get().confirmExit) return
+    const unsaved = services.unsavedChanges
+    if (closeConfirmed || (unsaved === 0 && !services.settings.get().confirmExit)) return
     event.preventDefault()
     const choice = dialog.showMessageBoxSync(mainWindow, {
-      type: 'question',
-      message: `Quit ${app.name}?`,
-      buttons: ['Quit', 'Cancel'],
-      defaultId: 0,
+      type: unsaved > 0 ? 'warning' : 'question',
+      message: unsaved > 0 ? `${unsaved === 1 ? 'A work order has' : `${unsaved} work orders have`} unsaved changes` : `Quit ${app.name}?`,
+      detail: unsaved > 0 ? 'If you quit now, those changes are lost.' : undefined,
+      buttons: unsaved > 0 ? ['Quit Without Saving', 'Cancel'] : ['Quit', 'Cancel'],
+      defaultId: unsaved > 0 ? 1 : 0,
       cancelId: 1
     })
     if (choice === 0) {

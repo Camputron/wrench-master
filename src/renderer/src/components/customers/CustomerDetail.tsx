@@ -1,7 +1,8 @@
-import { Envelope, Handset, MapPin, Pencil, Plus, TrashBin } from '@gravity-ui/icons'
+import { Envelope, FilePlus, Handset, MapPin, Pencil, Plus, TrashBin } from '@gravity-ui/icons'
 import { Button, Chip, EmptyState, Spinner, Table } from '@heroui/react'
 import { useQuery } from '@tanstack/react-query'
 import type { Customer, Vehicle } from '../../../../shared/types'
+import { useEditors } from '../../editors/editorsContext'
 import { customerName, formatAddress, formatDate, vehicleName, workOrderTotal } from '../../lib/format'
 import { keys } from '../../lib/queryClient'
 
@@ -28,6 +29,7 @@ function Section({ title, action, children }: { title: string; action?: React.Re
 
 /** The selected customer's contact details, vehicles, and work orders. */
 export default function CustomerDetail({ customer, onEdit, onDelete, onAddVehicle, onEditVehicle, onDeleteVehicle }: Props): React.ReactElement {
+  const { newWorkOrder, openWorkOrder } = useEditors()
   const vehicles = useQuery({ queryKey: keys.vehiclesOf(customer.id), queryFn: () => window.api.vehicles.listByCustomer(customer.id) })
   const workOrders = useQuery({ queryKey: keys.workOrdersOf(customer.id), queryFn: () => window.api.workOrders.listByCustomer(customer.id) })
   const name = [customer.firstName, customer.lastName].filter(Boolean).join(' ')
@@ -61,6 +63,10 @@ export default function CustomerDetail({ customer, onEdit, onDelete, onAddVehicl
           </ul>
         </div>
         <div className="flex shrink-0 gap-2">
+          <Button size="sm" onPress={() => newWorkOrder({ customer })}>
+            <FilePlus className="size-4" />
+            New work order
+          </Button>
           <Button size="sm" variant="secondary" onPress={onEdit}>
             <Pencil className="size-4" />
             Edit
@@ -103,6 +109,9 @@ export default function CustomerDetail({ customer, onEdit, onDelete, onAddVehicl
                     </Table.Cell>
                     <Table.Cell>
                       <div className="flex justify-end gap-1">
+                        <Button size="sm" variant="ghost" isIconOnly aria-label={`New work order for ${vehicleName(v)}`} onPress={() => newWorkOrder({ customer, vehicle: v })}>
+                          <FilePlus className="size-4" />
+                        </Button>
                         <Button size="sm" variant="ghost" isIconOnly aria-label={`Edit ${vehicleName(v)}`} onPress={() => onEditVehicle(v)}>
                           <Pencil className="size-4" />
                         </Button>
@@ -122,7 +131,7 @@ export default function CustomerDetail({ customer, onEdit, onDelete, onAddVehicl
       <Section title="Work orders">
         <Table variant="secondary">
           <Table.ScrollContainer>
-            <Table.Content aria-label="Work orders">
+            <Table.Content aria-label="Work orders" onRowAction={(key) => void openWorkOrder(Number(key))}>
               <Table.Header>
                 <Table.Column isRowHeader>#</Table.Column>
                 <Table.Column>Created</Table.Column>
@@ -132,7 +141,7 @@ export default function CustomerDetail({ customer, onEdit, onDelete, onAddVehicl
               </Table.Header>
               <Table.Body items={workOrders.data ?? []} renderEmptyState={() => <EmptyState className="py-4 text-center text-sm text-muted">{workOrders.isPending ? <Spinner size="sm" /> : 'No work orders yet.'}</EmptyState>}>
                 {(wo) => (
-                  <Table.Row id={wo.id}>
+                  <Table.Row id={wo.id} className="cursor-pointer">
                     <Table.Cell>{wo.id}</Table.Cell>
                     <Table.Cell className="whitespace-nowrap tabular-nums">{formatDate(wo.dateCreated)}</Table.Cell>
                     <Table.Cell>{vehicleName(wo.vehicle)}</Table.Cell>
