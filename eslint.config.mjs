@@ -14,7 +14,7 @@ export default defineConfig(
   {
     files: ['**/*.cjs'],
     languageOptions: { sourceType: 'commonjs' },
-    rules: { '@typescript-eslint/no-require-imports': 'off' }
+    rules: { '@typescript-eslint/no-require-imports': 'off', '@typescript-eslint/explicit-function-return-type': 'off' }
   },
 
   // React rules for the renderer only

@@ -1,7 +1,7 @@
 {
   "name": "wrench-master",
   "productName": "Wrench Master",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Invoice and work order manager for auto repair shops",
   "main": "./out/main/index.js",
   "author": "Camposm97",
@@ -17,6 +17,7 @@
     "db:seed": "electron-vite build && electron . --dev-db=seed",
     "db:drop": "electron-vite build && electron . --dev-db=drop",
     "db:reset": "electron-vite build && electron . --dev-db=reset",
+    "icons": "electron scripts/generate-icons.cjs",
     "build": "npm run typecheck && electron-vite build",
     "postinstall": "electron-builder install-app-deps",
     "build:unpack": "npm run build && electron-builder --dir",
