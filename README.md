@@ -43,6 +43,8 @@ To try the app with realistic data:
 
 The demo data is the same every time, with dates relative to today, so the dashboard always shows recent activity. Run these while the app is closed.
 
+Seeding also adds three work orders dated today for checking the printed invoice: a short one, an empty one, and a long one that runs to two pages. The command prints their numbers, and they're listed under **Recently saved** on the dashboard.
+
 > In VS Code's integrated terminal, `ELECTRON_RUN_AS_NODE` may be set, which stops Electron from starting as an app. If `npm run dev` or these commands fail with an error about `isPackaged`, run `unset ELECTRON_RUN_AS_NODE` first.
 
 ## Tests
