@@ -1,5 +1,5 @@
 import type { Database } from 'better-sqlite3'
-import { bill } from '../../shared/billing'
+import { bill, billFromSums } from '../../shared/billing'
 import { PAYMENT_METHODS, type AutoPart, type Labor, type MonthlyIncome, type Payment, type PaymentMethod, type WorkOrder, type WorkOrderFilter, type WorkOrderStats } from '../../shared/types'
 import { dbDatePlusDays, fromDbDate, likeEscape, prefixMatches, str, toDbBool, toDbDate, today } from './sql'
 
@@ -270,9 +270,27 @@ export class WorkOrderRepo {
     const count = (from: Date, to: Date): number => (this.db.prepare('select count(*) as n from work_order where date_completed >= ? and date_completed < ?').get(from.getTime(), to.getTime()) as { n: number }).n
     const y = now.getFullYear()
     const m = now.getMonth()
+    const { n: openCount } = this.db.prepare('select count(*) as n from work_order where date_completed is null').get() as { n: number }
+    // Sum each work order's lines in SQL rather than loading every line of every work order.
+    const sums = this.db
+      .prepare(
+        `select coalesce(w.tax_rate, 0) as taxRate,
+           coalesce((select sum(item_retail_price * item_quantity) from work_order_item i where i.work_order_id = w.work_order_id and not item_taxable), 0)
+             + coalesce((select sum(labor_billed_hrs * labor_rate) from work_order_labor l where l.work_order_id = w.work_order_id and not labor_taxable), 0) as untaxed,
+           coalesce((select sum(item_retail_price * item_quantity) from work_order_item i where i.work_order_id = w.work_order_id and item_taxable), 0)
+             + coalesce((select sum(labor_billed_hrs * labor_rate) from work_order_labor l where l.work_order_id = w.work_order_id and labor_taxable), 0) as taxable,
+           coalesce((select sum(amount) from work_order_payment p where p.work_order_id = w.work_order_id), 0) as paid
+         from work_order w`
+      )
+      .all() as { taxRate: number; untaxed: number; taxable: number; paid: number }[]
+    const owed = sums.map((s) => billFromSums(s) - s.paid).filter((x) => x >= 0.005)
     return {
       completedThisMonth: count(new Date(y, m, 1), new Date(y, m + 1, 1)),
-      completedThisYear: count(new Date(y, 0, 1), new Date(y + 1, 0, 1))
+      completedLastMonth: count(new Date(y, m - 1, 1), new Date(y, m, 1)),
+      completedThisYear: count(new Date(y, 0, 1), new Date(y + 1, 0, 1)),
+      openCount,
+      unpaidCount: owed.length,
+      unpaidTotal: owed.reduce((a, b) => a + b, 0)
     }
   }
 

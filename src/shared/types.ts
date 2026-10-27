@@ -137,7 +137,13 @@ export interface VehicleSuggestions {
 
 export interface WorkOrderStats {
   completedThisMonth: number
+  completedLastMonth: number
   completedThisYear: number
+  /** Work orders without a completed date */
+  openCount: number
+  /** Work orders (open or completed) with money still owed */
+  unpaidCount: number
+  unpaidTotal: number
 }
 
 export interface MonthlyIncome {

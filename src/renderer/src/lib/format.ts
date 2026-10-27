@@ -68,3 +68,8 @@ export function todayIso(): string {
   const pad = (n: number): string => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 }
+
+const compactMoney = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 1 })
+
+/** `$950`, `$1.2K`, `$3.4M`: for axis ticks and summary figures. */
+export const formatMoneyCompact = (amount: number): string => compactMoney.format(amount)

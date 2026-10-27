@@ -11,3 +11,16 @@ body {
   /* Desktop app: don't let clicks select interface text. Inputs stay selectable. */
   user-select: none;
 }
+
+/*
+ * Chart colors (data-viz reference palette, categorical slots 1-2), validated against the app's
+ * surfaces in both modes. Dark mode uses its own steps, not an automatic flip.
+ */
+.viz {
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+}
+:root[data-theme='dark'] .viz {
+  --series-1: #3987e5;
+  --series-2: #d95926;
+}

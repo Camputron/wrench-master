@@ -29,6 +29,11 @@ export function bill(wo: Pick<WorkOrder, 'parts' | 'labor' | 'taxRate'>): number
   return subtotal(wo) + tax(wo)
 }
 
+/** The same total as `bill`, from line sums already split into taxable and non-taxable amounts. */
+export function billFromSums(s: { untaxed: number; taxable: number; taxRate: number }): number {
+  return s.untaxed + s.taxable + s.taxable * s.taxRate
+}
+
 export function totalPayments(wo: Pick<WorkOrder, 'payments'>): number {
   return wo.payments.reduce((sum, p) => sum + p.amount, 0)
 }
