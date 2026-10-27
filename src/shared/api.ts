@@ -5,6 +5,7 @@ import type {
   CustomerSuggestions,
   MenuAction,
   MonthlyIncome,
+  Notice,
   PartSuggestion,
   Settings,
   SettingsPatch,
@@ -77,8 +78,18 @@ export interface Api {
     openWorkOrderIds(): Promise<number[]>
     setOpenWorkOrderIds(ids: number[]): Promise<void>
   }
+  invoices: {
+    /** The printable invoice for a work order (saved or not) as a complete HTML page. */
+    html(workOrder: WorkOrder): Promise<string>
+    /** Opens the system print dialog. Resolves to false if cancelled. */
+    print(workOrder: WorkOrder): Promise<boolean>
+    /** Asks where to save, then writes a PDF. Resolves to its path, or null if cancelled. */
+    savePdf(workOrder: WorkOrder): Promise<string | null>
+  }
   app: {
     info(): Promise<AppInfo>
+    /** Reveals a file in Finder / Explorer. */
+    showItemInFolder(path: string): Promise<void>
     /** Tells the main process how many open work orders have unsaved changes, so quitting can warn. */
     setUnsavedChanges(count: number): Promise<void>
   }
@@ -88,6 +99,7 @@ export interface Api {
 export interface AppEvents {
   'settings-changed': Settings
   menu: MenuAction
+  notice: Notice
   /** The database was replaced (e.g. by an import); reload anything shown. */
   'data-changed': null
 }
@@ -122,7 +134,8 @@ export const API_METHODS: { [N in keyof Api]: Record<keyof Api[N], true> } = {
   },
   settings: { get: true, update: true },
   session: { recentWorkOrders: true, openWorkOrderIds: true, setOpenWorkOrderIds: true },
-  app: { info: true, setUnsavedChanges: true }
+  invoices: { html: true, print: true, savePdf: true },
+  app: { info: true, showItemInFolder: true, setUnsavedChanges: true }
 }
 
 /** Main-process implementation of `Api`: same methods, but may return values directly. */

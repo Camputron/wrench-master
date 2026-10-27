@@ -1,4 +1,4 @@
-import { ArrowUturnCcwLeft, ArrowUturnCwRight, FloppyDisk } from '@gravity-ui/icons'
+import { ArrowUturnCcwLeft, ArrowUturnCwRight, FloppyDisk, Printer } from '@gravity-ui/icons'
 import { Button, Chip } from '@heroui/react'
 import { useState } from 'react'
 import { balance, laborSubtotal, partSubtotal } from '../../../../shared/billing'
@@ -15,15 +15,22 @@ import LaborFormModal from './LaborFormModal'
 import LineTable from './LineTable'
 import PartFormModal from './PartFormModal'
 import PaymentFormModal from './PaymentFormModal'
+import PrintPreviewModal from './PrintPreviewModal'
 import SummaryPanel from './SummaryPanel'
 
 type LineKind = 'parts' | 'labor' | 'payments'
-type Dialog = { kind: 'part' | 'labor' | 'payment'; index: number | null } | { kind: 'close' }
+type Dialog = { kind: 'part' | 'labor' | 'payment'; index: number | null } | { kind: 'close' } | { kind: 'print' }
 
 const replaceAt = <T,>(list: T[], index: number | null, item: T): T[] => (index === null ? [...list, item] : list.map((x, i) => (i === index ? item : x)))
 
 /** Edits one work order: customer and vehicle, parts, labor, payments, dates, and totals. */
-export default function WorkOrderEditor({ editor }: { editor: Editor }): React.ReactElement {
+interface Props {
+  editor: Editor
+  /** Changes each time File > Print is chosen. */
+  printRequest: number
+}
+
+export default function WorkOrderEditor({ editor, printRequest }: Props): React.ReactElement {
   const { edit, undo, redo, close } = useEditors()
   const saveWithFeedback = useSaveWorkOrder()
   const settings = useSettings()
@@ -38,6 +45,13 @@ export default function WorkOrderEditor({ editor }: { editor: Editor }): React.R
   const open = (d: Dialog): void => {
     setDialogKey((k) => k + 1)
     setDialog(d)
+  }
+
+  // Open the print preview when the menu asks (adjusting state on a prop change, during render).
+  const [handledPrint, setHandledPrint] = useState(printRequest)
+  if (printRequest !== handledPrint) {
+    setHandledPrint(printRequest)
+    open({ kind: 'print' })
   }
   const onDialogOpenChange = (isOpen: boolean): void => {
     if (!isOpen) setDialog(null)
@@ -75,6 +89,10 @@ export default function WorkOrderEditor({ editor }: { editor: Editor }): React.R
           </Button>
           <Button size="sm" variant="ghost" isIconOnly aria-label="Redo" isDisabled={editor.future.length === 0} onPress={() => redo(key)}>
             <ArrowUturnCwRight className="size-4" />
+          </Button>
+          <Button size="sm" variant="tertiary" onPress={() => open({ kind: 'print' })}>
+            <Printer className="size-4" />
+            Print…
           </Button>
           <Button size="sm" variant="tertiary" onPress={() => (dirty ? open({ kind: 'close' }) : close(key))}>
             Close
@@ -170,6 +188,7 @@ export default function WorkOrderEditor({ editor }: { editor: Editor }): React.R
           onSubmit={(payment) => setLines('payments', replaceAt(wo.payments, paymentDialog.index, payment))}
         />
       )}
+      {dialog?.kind === 'print' && <PrintPreviewModal key={dialogKey} isOpen onOpenChange={onDialogOpenChange} workOrder={wo} />}
       {dialog?.kind === 'close' && (
         <ConfirmDialog key={dialogKey} isOpen onOpenChange={onDialogOpenChange} title={wo.id > 0 ? `Discard changes to work order #${wo.id}?` : 'Discard this new work order?'} confirmLabel="Discard changes" onConfirm={async () => close(key)}>
           <p>Your unsaved changes will be lost.</p>

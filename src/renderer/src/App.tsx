@@ -1,4 +1,4 @@
-import { Toast } from '@heroui/react'
+import { Toast, toast } from '@heroui/react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useCallback, useState } from 'react'
 import type { Page } from '../../shared/types'
@@ -39,6 +39,8 @@ function Shell({ page, setPage }: ShellProps): React.ReactElement {
   const [dataVersion, setDataVersion] = useState(0)
   /** Bumped by File > New Customer. */
   const [newCustomerRequest, setNewCustomerRequest] = useState(0)
+  /** Bumped by File > Print Work Order. */
+  const [printRequest, setPrintRequest] = useState(0)
 
   const open = (which: AvatarMenuAction): void => {
     if (which === 'preferences') setPreferencesKey((k) => k + 1)
@@ -65,6 +67,10 @@ function Shell({ page, setPage }: ShellProps): React.ReactElement {
       case 'save':
         if (shownEditor) void saveWorkOrder(shownEditor.key)
         break
+      case 'print':
+        if (shownEditor) setPrintRequest((n) => n + 1)
+        else toast.info('Open a work order to print it.')
+        break
       case 'undo':
       case 'redo':
         if (isEditingText() || !shownEditor) document.execCommand(action.type)
@@ -73,6 +79,11 @@ function Shell({ page, setPage }: ShellProps): React.ReactElement {
       default:
         open(action.type)
     }
+  })
+  useAppEvent('notice', ({ kind, message, path }) => {
+    const options = path ? { actionProps: { children: 'Show in folder', onPress: () => void window.api.app.showItemInFolder(path) } } : undefined
+    if (kind === 'success') toast.success(message, options)
+    else toast.danger(message, options)
   })
   useAppEvent('data-changed', () => {
     // Open editors refer to work orders from the old database.
@@ -87,7 +98,7 @@ function Shell({ page, setPage }: ShellProps): React.ReactElement {
       <main key={dataVersion} className="min-h-0 flex-1 overflow-auto">
         {page === 'dashboard' && <DashboardPage />}
         {page === 'customers' && <CustomersPage newCustomerRequest={newCustomerRequest} />}
-        {page === 'workOrders' && <WorkOrdersPage />}
+        {page === 'workOrders' && <WorkOrdersPage printRequest={printRequest} />}
       </main>
       {settings && <PreferencesModal key={preferencesKey} isOpen={modal === 'preferences'} onOpenChange={onOpenChange} settings={settings} />}
       <AboutModal isOpen={modal === 'about'} onOpenChange={onOpenChange} />

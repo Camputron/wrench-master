@@ -1,6 +1,7 @@
 import { app, Menu, shell, type MenuItemConstructorOptions } from 'electron'
 import { is } from '@electron-toolkit/utils'
 import type { MenuAction } from '../shared/types'
+import type { ExportKind } from './excelExport'
 
 export const ISSUES_URL = 'https://github.com/Camposm97/Autoshop-Invoice-Manager/issues'
 
@@ -10,6 +11,7 @@ export interface MenuHandlers {
   /** Steps the interface size up (+1), down (-1), or back to 100% (0). */
   zoom(step: 1 | -1 | 0): void
   importFromJavaApp(): void
+  exportData(kind: ExportKind): void
 }
 
 export function buildMenu(h: MenuHandlers): Menu {
@@ -45,8 +47,18 @@ export function buildMenu(h: MenuHandlers): Menu {
         { label: 'New Customer…', click: () => h.send({ type: 'newCustomer' }) },
         { type: 'separator' },
         { label: 'Save Work Order', accelerator: 'CmdOrCtrl+S', click: () => h.send({ type: 'save' }) },
+        { label: 'Print Work Order…', accelerator: 'CmdOrCtrl+P', click: () => h.send({ type: 'print' }) },
         { type: 'separator' },
         { label: 'Import from Autoshop Invoice Manager…', click: () => h.importFromJavaApp() },
+        {
+          label: 'Export to Excel',
+          submenu: [
+            { label: 'Customers…', click: () => h.exportData('customers') },
+            { label: 'Vehicles…', click: () => h.exportData('vehicles') },
+            { label: 'Work Orders…', click: () => h.exportData('workOrders') },
+            { label: 'Parts Catalog…', click: () => h.exportData('parts') }
+          ]
+        },
         { type: 'separator' },
         ...(isMac ? [{ role: 'close' } satisfies MenuItemConstructorOptions] : [preferences, { type: 'separator' } satisfies MenuItemConstructorOptions, { role: 'quit', label: 'Exit' } satisfies MenuItemConstructorOptions])
       ]

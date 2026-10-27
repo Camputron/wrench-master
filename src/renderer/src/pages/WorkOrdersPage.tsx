@@ -16,7 +16,7 @@ function editorLabel(e: Editor): string {
 const tabClass = (active: boolean): string => `flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm whitespace-nowrap transition-colors ${active ? 'bg-default font-medium text-foreground' : 'text-muted hover:bg-default/60 hover:text-foreground'}`
 
 /** The work order list, plus a tab for each open work order. */
-export default function WorkOrdersPage(): React.ReactElement {
+export default function WorkOrdersPage({ printRequest }: { printRequest: number }): React.ReactElement {
   const { editors, active, showList, show, close } = useEditors()
   const [closing, setClosing] = useState<Editor | null>(null)
 
@@ -52,7 +52,7 @@ export default function WorkOrdersPage(): React.ReactElement {
           )
         })}
       </nav>
-      <div className="min-h-0 flex-1 overflow-auto">{active ? <WorkOrderEditor key={active.key} editor={active} /> : <WorkOrderList />}</div>
+      <div className="min-h-0 flex-1 overflow-auto">{active ? <WorkOrderEditor key={active.key} editor={active} printRequest={printRequest} /> : <WorkOrderList />}</div>
 
       {closing && (
         <ConfirmDialog

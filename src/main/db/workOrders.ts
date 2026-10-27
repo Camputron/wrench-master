@@ -283,14 +283,15 @@ export class WorkOrderRepo {
          from work_order w`
       )
       .all() as { taxRate: number; untaxed: number; taxable: number; paid: number }[]
-    const owed = sums.map((s) => billFromSums(s) - s.paid).filter((x) => x >= 0.005)
+    // Each balance to the cent, as printed on its invoice, so the total matches what customers were billed.
+    const owed = sums.map((s) => Math.round((billFromSums(s) - s.paid) * 100) / 100).filter((x) => x > 0)
     return {
       completedThisMonth: count(new Date(y, m, 1), new Date(y, m + 1, 1)),
       completedLastMonth: count(new Date(y, m - 1, 1), new Date(y, m, 1)),
       completedThisYear: count(new Date(y, 0, 1), new Date(y + 1, 0, 1)),
       openCount,
       unpaidCount: owed.length,
-      unpaidTotal: owed.reduce((a, b) => a + b, 0)
+      unpaidTotal: Math.round(owed.reduce((a, b) => a + b, 0) * 100) / 100
     }
   }
 

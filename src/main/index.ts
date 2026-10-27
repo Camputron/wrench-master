@@ -7,6 +7,7 @@ import { ZOOM_LEVELS, type Settings } from '../shared/types'
 import { registerIpc } from './ipc'
 import { importFromJavaApp } from './legacyImport'
 import { runDevDbCommand, type DevDbAction } from './devData'
+import { exportToExcel, EXPORT_FILE_NAMES, type ExportKind } from './excelExport'
 import { buildMenu } from './menu'
 import { emit, Services } from './services'
 import { SettingsStore } from './settings'
@@ -33,6 +34,21 @@ function stepZoom(step: 1 | -1 | 0): void {
   const i = levels.indexOf(services.settings.get().zoom)
   const next = step === 0 ? 1 : levels[Math.min(levels.length - 1, Math.max(0, (i < 0 ? levels.indexOf(1) : i) + step))]
   services.settings.update({ zoom: next })
+}
+
+/** File > Export to Excel: asks where to save, writes the workbook, and tells the renderer how it went. */
+async function exportData(kind: ExportKind): Promise<void> {
+  const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
+  const options = { title: 'Export to Excel', defaultPath: join(app.getPath('documents'), EXPORT_FILE_NAMES[kind]), filters: [{ name: 'Excel workbook', extensions: ['xlsx'] }] }
+  const { canceled, filePath } = win ? await dialog.showSaveDialog(win, options) : await dialog.showSaveDialog(options)
+  if (canceled || !filePath) return
+  try {
+    const count = await exportToExcel(kind, services.repos, filePath)
+    const what = { customers: 'customer', vehicles: 'vehicle', workOrders: 'work order', parts: 'catalog part' }[kind]
+    emit('notice', { kind: 'success', message: `Exported ${count} ${what}${count === 1 ? '' : 's'}`, path: filePath })
+  } catch (error) {
+    emit('notice', { kind: 'error', message: `Export failed: ${error instanceof Error ? error.message : String(error)}` })
+  }
 }
 
 function createWindow(): void {
@@ -130,7 +146,8 @@ app.whenReady().then(() => {
       importFromJavaApp: () => {
         const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
         if (win) void importFromJavaApp(win, services)
-      }
+      },
+      exportData: (kind) => void exportData(kind)
     })
   )
 

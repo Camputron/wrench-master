@@ -195,6 +195,7 @@ export type MenuAction =
   | { type: 'newCustomer' }
   | { type: 'newWorkOrder' }
   | { type: 'save' }
+  | { type: 'print' }
   /** Edit > Undo/Redo: the renderer undoes typing in a text field, or the last work order change otherwise. */
   | { type: 'undo' }
   | { type: 'redo' }
@@ -219,3 +220,11 @@ export type VinDecodeResult =
       warning?: string
     }
   | { ok: false; error: string }
+
+/** A message from the main process for the renderer to show, e.g. after an export. */
+export interface Notice {
+  kind: 'success' | 'error'
+  message: string
+  /** A file the message is about, offered as "Show in folder". */
+  path?: string
+}

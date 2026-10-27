@@ -1,7 +1,9 @@
-import { app, ipcMain } from 'electron'
+import { app, BrowserWindow, ipcMain, shell } from 'electron'
 import type { ApiHandlers } from '../shared/api'
 import type { WorkOrder } from '../shared/types'
 import type { Services } from './services'
+import { invoiceHtml } from './invoice'
+import { printInvoice, saveInvoicePdf } from './printing'
 import { decodeVin } from './vin'
 
 export function createHandlers(services: Services): ApiHandlers {
@@ -62,7 +64,13 @@ export function createHandlers(services: Services): ApiHandlers {
       openWorkOrderIds: () => session.openWorkOrderIds(),
       setOpenWorkOrderIds: (ids) => session.setOpen(ids)
     },
+    invoices: {
+      html: (wo) => invoiceHtml(wo, settings.get()),
+      print: (wo) => printInvoice(wo, settings.get()),
+      savePdf: (wo) => saveInvoicePdf(BrowserWindow.getFocusedWindow(), wo, settings.get())
+    },
     app: {
+      showItemInFolder: (path) => shell.showItemInFolder(path),
       info: () => ({
         name: app.getName(),
         version: app.getVersion(),
