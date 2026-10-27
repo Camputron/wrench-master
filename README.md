@@ -45,6 +45,16 @@ The demo data is the same every time, with dates relative to today, so the dashb
 
 > In VS Code's integrated terminal, `ELECTRON_RUN_AS_NODE` may be set, which stops Electron from starting as an app. If `npm run dev` or these commands fail with an error about `isPackaged`, run `unset ELECTRON_RUN_AS_NODE` first.
 
+## Tests
+
+| Command              | What it runs                                                                                                                                                                                                                                                                                 |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npm test`           | Unit and integration tests (Vitest, about a second): the database layer against a database written the way the Java app wrote it, billing, invoices, Excel export, the Java import, VIN decoding (recorded NHTSA responses, no network), settings, menus, and the work order editor's state. |
+| `npm run test:watch` | The same, re-running as files change.                                                                                                                                                                                                                                                        |
+| `npm run test:e2e`   | Builds the app and drives it end to end with Playwright (about 35 seconds): dashboard, customers, building and saving work orders, undo/redo, unsaved-change prompts, printing, PDF and Excel export, preferences, and importing from the Java app.                                          |
+
+End-to-end tests launch the real app with a temporary data folder, so they never touch your dev or installed data. Native dialogs (save, print, confirmations) are replaced with stubs that return set answers.
+
 ## Building installers
 
 | Command               | Output (in `dist/`)                                                          |

@@ -18,3 +18,7 @@ out
 
 # ESLint
 .eslintcache
+
+# Tests
+test-results
+playwright-report

@@ -1,0 +1,94 @@
+import type { MenuItemConstructorOptions } from 'electron'
+import { describe, expect, it, vi } from 'vitest'
+import { bill } from '../../../src/shared/billing'
+import { createRepos } from '../../../src/main/db'
+import { dropDevData, runDevDbCommand, seedDemoData } from '../../../src/main/devData'
+import { buildMenu } from '../../../src/main/menu'
+import { join } from 'path'
+import { existsSync } from 'fs'
+import { tempDir } from '../helpers/tempDir'
+
+describe('application menu', () => {
+  const handlers = { send: vi.fn(), zoom: vi.fn(), importFromJavaApp: vi.fn(), exportData: vi.fn() }
+  const menu = buildMenu(handlers) as unknown as { items: MenuItemConstructorOptions[] }
+  const find = (label: string): MenuItemConstructorOptions => {
+    const queue = [...menu.items]
+    while (queue.length) {
+      const item = queue.shift()!
+      if (item.label === label) return item
+      if (Array.isArray(item.submenu)) queue.push(...item.submenu)
+    }
+    throw new Error(`No menu item "${label}"`)
+  }
+  const click = (label: string): void => (find(label).click as () => void)()
+
+  it.each([
+    ['New Work Order', { type: 'newWorkOrder' }, 'CmdOrCtrl+N'],
+    ['New Customer…', { type: 'newCustomer' }, undefined],
+    ['Save Work Order', { type: 'save' }, 'CmdOrCtrl+S'],
+    ['Print Work Order…', { type: 'print' }, 'CmdOrCtrl+P'],
+    ['Undo', { type: 'undo' }, 'CmdOrCtrl+Z'],
+    ['Dashboard', { type: 'navigate', page: 'dashboard' }, 'CmdOrCtrl+1'],
+    ['Customers', { type: 'navigate', page: 'customers' }, 'CmdOrCtrl+2'],
+    ['Work Orders', { type: 'navigate', page: 'workOrders' }, 'CmdOrCtrl+3']
+  ])('%s sends %j (%s)', (label, action, accelerator) => {
+    click(label)
+    expect(handlers.send).toHaveBeenLastCalledWith(action)
+    expect(find(label).accelerator).toBe(accelerator)
+  })
+
+  it('wires zoom, import, and every export', () => {
+    click('Zoom In')
+    click('Zoom Out')
+    click('Actual Size')
+    expect(handlers.zoom.mock.calls).toEqual([[1], [-1], [0]])
+    click('Import from Autoshop Invoice Manager…')
+    expect(handlers.importFromJavaApp).toHaveBeenCalled()
+    for (const label of ['Customers…', 'Vehicles…', 'Work Orders…', 'Parts Catalog…']) click(label)
+    expect(handlers.exportData.mock.calls.flat()).toEqual(['customers', 'vehicles', 'workOrders', 'parts'])
+  })
+})
+
+describe('demo data', () => {
+  it('seeds the same realistic data every time, through the normal repositories', () => {
+    const today = new Date(2026, 9, 27)
+    const runs = [0, 1].map(() => {
+      const r = createRepos(join(tempDir(), 'autoshop.db'))
+      const summary = seedDemoData(r, 0.08625, 90, today)
+      const snapshot = { summary, last: r.workOrders.list(1)[0], stats: r.workOrders.stats(today) }
+      r.db.close()
+      return snapshot
+    })
+    expect(runs[0]).toEqual(runs[1])
+    const { summary, stats } = runs[0]
+    expect(summary).toMatchObject({ customers: 28, parts: 13 })
+    expect(summary.workOrders).toBeGreaterThan(200)
+    expect(summary.open).toBe(stats.openCount)
+  })
+
+  it('agrees with line-by-line billing on every seeded work order', () => {
+    const r = createRepos(join(tempDir(), 'autoshop.db'))
+    seedDemoData(r, 0.08625, 90, new Date(2026, 9, 27))
+    const all = r.workOrders.list()
+    const owed = all.map((w) => Math.round((bill(w) - w.payments.reduce((s, p) => s + p.amount, 0)) * 100) / 100).filter((x) => x > 0)
+    const stats = r.workOrders.stats(new Date(2026, 9, 27))
+    expect(stats.unpaidCount).toBe(owed.length)
+    expect(Math.round(stats.unpaidTotal * 100)).toBe(Math.round(owed.reduce((a, b) => a + b, 0) * 100))
+    expect(stats.completedThisYear).toBe(all.filter((w) => w.dateCompleted?.startsWith('2026')).length)
+    r.db.close()
+  })
+
+  it('refuses to seed over existing data; drop and reset work', () => {
+    const dir = tempDir()
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {})
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const settings = { taxRate: 0.08625, laborRate: 90 }
+    expect(runDevDbCommand('seed', dir, settings)).toBe(0)
+    expect(runDevDbCommand('seed', dir, settings)).toBe(1)
+    expect(runDevDbCommand('reset', dir, settings)).toBe(0)
+    expect(dropDevData(dir).length).toBeGreaterThan(0)
+    expect(existsSync(join(dir, 'autoshop.db'))).toBe(false)
+    expect(runDevDbCommand('drop', dir, settings)).toBe(0)
+    expect(log).toHaveBeenCalledWith(expect.stringContaining('No dev database'))
+  })
+})
