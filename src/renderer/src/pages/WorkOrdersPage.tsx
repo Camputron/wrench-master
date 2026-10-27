@@ -52,7 +52,15 @@ export default function WorkOrdersPage({ printRequest }: { printRequest: number 
           )
         })}
       </nav>
-      <div className="min-h-0 flex-1 overflow-auto">{active ? <WorkOrderEditor key={active.key} editor={active} printRequest={printRequest} /> : <WorkOrderList />}</div>
+      {/* The list stays mounted while an editor is shown, so its search, filters, and scroll position survive. */}
+      <div className="min-h-0 flex-1 overflow-auto" hidden={active !== null}>
+        <WorkOrderList />
+      </div>
+      {active && (
+        <div className="min-h-0 flex-1 overflow-auto">
+          <WorkOrderEditor key={active.key} editor={active} printRequest={printRequest} />
+        </div>
+      )}
 
       {closing && (
         <ConfirmDialog

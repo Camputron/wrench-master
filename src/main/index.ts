@@ -89,7 +89,9 @@ function createWindow(): void {
     })
     if (choice === 0) {
       closeConfirmed = true
-      app.quit()
+      // Quit on the next tick: this close was cancelled above, which also cancels a quit in progress
+      // (e.g. Cmd+Q), and asking to quit again before that settles is ignored.
+      setImmediate(() => app.quit())
     }
   })
 

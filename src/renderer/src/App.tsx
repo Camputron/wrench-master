@@ -95,10 +95,13 @@ function Shell({ page, setPage }: ShellProps): React.ReactElement {
   return (
     <div className="flex h-full flex-col">
       <AppBar page={page} onPageChange={setPage} shop={settings?.shop} onMenuAction={open} />
-      <main key={dataVersion} className="min-h-0 flex-1 overflow-auto">
-        {page === 'dashboard' && <DashboardPage />}
-        {page === 'customers' && <CustomersPage newCustomerRequest={newCustomerRequest} />}
-        {page === 'workOrders' && <WorkOrdersPage printRequest={printRequest} />}
+      <main className="min-h-0 flex-1 overflow-auto">
+        {/* Keyed wrapper, not <main> itself: re-keying the <main> landmark left the old page in the DOM. */}
+        <div key={dataVersion} className="contents">
+          {page === 'dashboard' && <DashboardPage />}
+          {page === 'customers' && <CustomersPage newCustomerRequest={newCustomerRequest} />}
+          {page === 'workOrders' && <WorkOrdersPage printRequest={printRequest} />}
+        </div>
       </main>
       {settings && <PreferencesModal key={preferencesKey} isOpen={modal === 'preferences'} onOpenChange={onOpenChange} settings={settings} />}
       <AboutModal isOpen={modal === 'about'} onOpenChange={onOpenChange} />
