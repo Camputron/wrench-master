@@ -1,14 +1,24 @@
 import { app, shell, BrowserWindow, dialog, Menu, nativeTheme } from 'electron'
+import { mkdirSync } from 'fs'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { ZOOM_LEVELS, type Settings } from '../shared/types'
 import { registerIpc } from './ipc'
 import { importFromJavaApp } from './legacyImport'
+import { runDevDbCommand, type DevDbAction } from './devData'
 import { buildMenu } from './menu'
 import { emit, Services } from './services'
+import { SettingsStore } from './settings'
 
 let services: Services
+
+// Unpackaged runs (npm run dev, the db:* scripts) keep their own data folder, so development and demo
+// data can never touch the database of an installed copy of the app. An explicit --user-data-dir wins.
+if (is.dev && !app.commandLine.hasSwitch('user-data-dir')) app.setPath('userData', join(app.getPath('appData'), `${app.getName()} (Dev)`))
+
+/** `--dev-db=seed|drop|reset` (the db:* npm scripts): manage demo data in the dev data folder, then exit. */
+const devDbAction = process.argv.find((a) => a.startsWith('--dev-db='))?.slice('--dev-db='.length)
 
 /** Applies theme and interface size to every window, and tells the renderer. */
 function applySettings(settings: Settings): void {
@@ -85,6 +95,20 @@ function createWindow(): void {
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
 app.whenReady().then(() => {
+  if (devDbAction !== undefined) {
+    if (!is.dev || !['seed', 'drop', 'reset'].includes(devDbAction)) {
+      console.error(is.dev ? `Unknown --dev-db action "${devDbAction}". Use seed, drop, or reset.` : '--dev-db only works in development.')
+      app.exit(1)
+      return
+    }
+    app.dock?.hide()
+    const dataDir = app.getPath('userData')
+    mkdirSync(dataDir, { recursive: true })
+    const settings = new SettingsStore(join(dataDir, 'settings.json'), () => {}).get()
+    app.exit(runDevDbCommand(devDbAction as DevDbAction, dataDir, settings))
+    return
+  }
+
   // Set app user model id for windows
   electronApp.setAppUserModelId('com.camposmdev.wrenchmaster')
 

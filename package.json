@@ -14,6 +14,9 @@
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
     "start": "electron-vite preview",
     "dev": "electron-vite dev",
+    "db:seed": "electron-vite build && electron . --dev-db=seed",
+    "db:drop": "electron-vite build && electron . --dev-db=drop",
+    "db:reset": "electron-vite build && electron . --dev-db=reset",
     "build": "npm run typecheck && electron-vite build",
     "postinstall": "electron-builder install-app-deps",
     "build:unpack": "npm run build && electron-builder --dir",
@@ -29,7 +32,8 @@
     "@heroui/styles": "^3.2.6",
     "@internationalized/date": "^3.12.4",
     "@tanstack/react-query": "^5.105.0",
-    "better-sqlite3": "^13.0.3"
+    "better-sqlite3": "^13.0.3",
+    "exceljs": "^4.4.0"
   },
   "devDependencies": {
     "@electron-toolkit/eslint-config-ts": "^4.0.0",
