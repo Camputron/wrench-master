@@ -41,10 +41,18 @@ describe('invoice HTML', () => {
     expect(html).toContain('Date 03/05/2024')
     expect(html).toContain('Completed 03/20/2024')
     expect(html).toContain('100,000 → 100,050 (50 mi)')
-    expect(html).toContain('Sales tax (8.625%)')
+    expect(html).toContain('<td>Sales tax</td>')
+    expect(html).not.toContain('8.625')
     expect(html).toContain('$254.41') // total
     expect(html).toContain('$104.41') // amount due
     expect(html).toContain('* Not taxed') // the shop supplies line
+  })
+
+  it('pins the payments and totals to the bottom of a full-height page', () => {
+    const html = invoiceHtml(wo, shop)
+    expect(html).toMatch(/\.page \{[^}]*min-height: 10\.15in/)
+    expect(html).toMatch(/\.bottom \{[^}]*margin-top: auto/)
+    expect(html.indexOf('class="bottom"')).toBeGreaterThan(html.indexOf('class="lines"'))
   })
 
   it('labels unsaved work orders as drafts and leaves out an empty shop ID line', () => {

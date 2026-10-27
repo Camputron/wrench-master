@@ -31,42 +31,46 @@ function mileage(wo: WorkOrder): string {
   return [mileageIn && `In ${n(mileageIn)}`, mileageOut && `Out ${n(mileageOut)}`].filter(Boolean).join(' · ')
 }
 
-/** A definition-list row, skipped when empty. */
-const field = (label: string, value: string): string => (value.trim() ? `<dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd>` : '')
+/** A label/value pair, skipped when empty. Details sit two pairs per row; `wide` values take a whole row. */
+const field = (label: string, value: string, wide = false): string => (value.trim() ? `<dt${wide ? ' class="wide"' : ''}>${escapeHtml(label)}</dt><dd${wide ? ' class="wide"' : ''}>${escapeHtml(value)}</dd>` : '')
 
 const STYLE = `
-  @page { size: Letter; margin: 0.5in; }
+  @page { size: Letter; margin: 0.4in 0.45in; }
   * { box-sizing: border-box; }
-  body { margin: 0; font: 10pt/1.4 -apple-system, "Segoe UI", system-ui, sans-serif; color: #111; background: #fff; }
-  .page { max-width: 7.5in; margin: 0 auto; }
-  header { display: flex; justify-content: space-between; gap: 24px; padding-bottom: 12px; border-bottom: 2px solid #111; }
-  h1 { font-size: 18pt; margin: 0 0 2px; }
-  .shop p { margin: 0; color: #444; }
-  .shop .title { margin-top: 4px; font-weight: 600; color: #111; }
+  body { margin: 0; font: 9.5pt/1.3 -apple-system, "Segoe UI", system-ui, sans-serif; color: #111; background: #fff; }
+  /* Fills the printable height (11in - 0.8in margins) so the totals sit at the bottom of the page. */
+  .page { display: flex; flex-direction: column; min-height: 10.15in; }
+  header { display: flex; justify-content: space-between; gap: 16px; padding-bottom: 6px; border-bottom: 1.5px solid #111; }
+  h1 { font-size: 15pt; margin: 0 0 1px; line-height: 1.15; }
+  .shop p, .meta p { margin: 0; color: #333; }
+  .shop .title { font-weight: 600; color: #111; }
   .meta { text-align: right; white-space: nowrap; }
-  .meta .number { font-size: 14pt; font-weight: 700; }
-  .meta p { margin: 0; color: #444; }
-  .boxes { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0; }
-  .box { border: 1px solid #ccc; border-radius: 6px; padding: 10px 12px; }
-  h2 { font-size: 9pt; text-transform: uppercase; letter-spacing: 0.06em; color: #555; margin: 0 0 6px; }
-  dl { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; margin: 0; }
+  .meta .number { font-size: 12pt; font-weight: 700; color: #111; }
+  .boxes { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 8px 0; }
+  .box { border: 1px solid #bbb; border-radius: 3px; padding: 5px 8px; }
+  h2 { font-size: 8pt; text-transform: uppercase; letter-spacing: 0.05em; color: #444; margin: 0 0 3px; }
+  dl { display: grid; grid-template-columns: auto 1fr auto 1fr; gap: 1px 8px; margin: 0; }
   dt { color: #555; }
-  dd { margin: 0; }
-  table { width: 100%; border-collapse: collapse; margin: 0 0 14px; page-break-inside: auto; }
+  dd { margin: 0; overflow-wrap: anywhere; }
+  dt.wide { grid-column: 1; }
+  dd.wide { grid-column: 2 / -1; }
+  .lines h2 { margin-top: 6px; }
+  table { width: 100%; border-collapse: collapse; page-break-inside: auto; }
   tr { page-break-inside: avoid; }
-  th { text-align: left; font-size: 8.5pt; text-transform: uppercase; letter-spacing: 0.04em; color: #555; border-bottom: 1px solid #111; padding: 4px 6px; }
-  td { border-bottom: 1px solid #e3e3e3; padding: 5px 6px; vertical-align: top; }
+  th { text-align: left; font-size: 8pt; text-transform: uppercase; letter-spacing: 0.04em; color: #444; border-bottom: 1px solid #111; padding: 2px 5px; }
+  td { border-bottom: 1px solid #ddd; padding: 2px 5px; vertical-align: top; }
   .num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
-  .code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 9pt; }
+  .code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 8.5pt; }
   .desc { white-space: pre-line; }
   .empty { color: #777; font-style: italic; }
-  .bottom { display: flex; justify-content: space-between; gap: 24px; align-items: flex-start; page-break-inside: avoid; }
-  .totals { width: 3.2in; margin-left: auto; border-collapse: collapse; }
-  .totals td { border: 0; padding: 2px 6px; }
-  .totals .strong td { font-weight: 700; border-top: 1px solid #111; padding-top: 5px; }
-  .totals .due td { font-size: 12pt; font-weight: 700; border-top: 2px solid #111; padding-top: 6px; }
-  .note { font-size: 8.5pt; color: #555; }
-  .payments { flex: 1; }
+  /* margin-top: auto pushes payments and totals to the bottom of the page. */
+  .bottom { margin-top: auto; padding-top: 10px; display: flex; justify-content: space-between; gap: 16px; align-items: flex-end; page-break-inside: avoid; }
+  .payments { flex: 1; max-width: 3.6in; }
+  .totals { width: 2.8in; border-collapse: collapse; }
+  .totals td { border: 0; padding: 1px 5px; }
+  .totals .strong td { font-weight: 700; border-top: 1px solid #111; padding-top: 3px; }
+  .totals .due td { font-size: 11pt; font-weight: 700; border-top: 1.5px solid #111; padding-top: 4px; }
+  .note { font-size: 8pt; color: #555; margin: 3px 0 0; }
 `
 
 /** The printable invoice for a work order, as a complete HTML page (always light, US Letter). */
@@ -78,7 +82,6 @@ export function invoiceHtml(wo: WorkOrder, settings: Settings): string {
   const shopId = shop.repairShopId.trim() ? `${stateAbbr ? `${stateAbbr}S ` : ''}Repair Shop #${shop.repairShopId.trim()}` : ''
   const anyUntaxed = wo.parts.some((p) => !p.taxable) || wo.labor.some((l) => !l.taxable)
   const untaxedMark = (taxable: boolean): string => (taxable ? '' : ' *')
-  const taxPercent = `${(wo.taxRate * 100).toFixed(3).replace(/\.?0+$/, '')}%`
 
   const parts = wo.parts.length
     ? wo.parts
@@ -131,26 +134,27 @@ export function invoiceHtml(wo: WorkOrder, settings: Settings): string {
       <h2>Customer</h2>
       <dl>
         ${field('Name', [c.firstName, c.lastName].filter(Boolean).join(' '))}
-        ${field('Company', c.company)}
         ${field('Phone', c.phone)}
-        ${field('Email', c.email)}
-        ${field('Address', address(c))}
+        ${field('Company', c.company, true)}
+        ${field('Email', c.email, true)}
+        ${field('Address', address(c), true)}
       </dl>
     </section>
     <section class="box">
       <h2>Vehicle</h2>
       <dl>
         ${field('Vehicle', [v.year, v.make, v.model].filter(Boolean).join(' '))}
-        ${field('VIN', v.vin)}
         ${field('Plate', v.licensePlate)}
+        ${field('VIN', v.vin, true)}
         ${field('Color', v.color)}
         ${field('Engine', v.engine)}
-        ${field('Transmission', v.transmission)}
-        ${field('Mileage', mileage(wo))}
+        ${field('Transmission', v.transmission, true)}
+        ${field('Mileage', mileage(wo), true)}
       </dl>
     </section>
   </div>
 
+  <div class="lines">
   <h2>Parts</h2>
   <table>
     <thead><tr><th style="width:1.3in">Part #</th><th>Description</th><th class="num">Qty</th><th class="num">Unit price</th><th class="num">Total</th></tr></thead>
@@ -162,6 +166,7 @@ export function invoiceHtml(wo: WorkOrder, settings: Settings): string {
     <thead><tr><th style="width:1.3in">Code</th><th>Description</th><th class="num">Hours</th><th class="num">Rate</th><th class="num">Total</th></tr></thead>
     <tbody>${labor}</tbody>
   </table>
+  </div>
 
   <div class="bottom">
     <div class="payments">
@@ -172,7 +177,7 @@ export function invoiceHtml(wo: WorkOrder, settings: Settings): string {
       <tr><td>Parts</td><td class="num">${fmt(partsSubtotal(wo))}</td></tr>
       <tr><td>Labor</td><td class="num">${fmt(laborsSubtotal(wo))}</td></tr>
       <tr><td>Subtotal</td><td class="num">${fmt(subtotal(wo))}</td></tr>
-      <tr><td>Sales tax (${escapeHtml(taxPercent)})</td><td class="num">${fmt(tax(wo))}</td></tr>
+      <tr><td>Sales tax</td><td class="num">${fmt(tax(wo))}</td></tr>
       <tr class="strong"><td>Total</td><td class="num">${fmt(bill(wo))}</td></tr>
       <tr><td>Payments</td><td class="num">${totalPayments(wo) > 0 ? '−' : ''}${fmt(totalPayments(wo))}</td></tr>
       <tr class="due"><td>Amount due</td><td class="num">${fmt(balance(wo))}</td></tr>
