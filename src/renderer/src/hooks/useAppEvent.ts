@@ -3,9 +3,9 @@ import type { AppEvents } from '../../../shared/api'
 
 /** Calls `listener` whenever the main process sends the event. */
 export function useAppEvent<K extends keyof AppEvents>(name: K, listener: (payload: AppEvents[K]) => void): void {
-  const latest = useRef(listener)
+  const listenerRef = useRef(listener)
   useEffect(() => {
-    latest.current = listener
+    listenerRef.current = listener
   })
-  useEffect(() => window.events.on(name, (payload) => latest.current(payload)), [name])
+  useEffect(() => window.events.on(name, (payload) => listenerRef.current(payload)), [name])
 }

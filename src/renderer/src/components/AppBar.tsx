@@ -3,7 +3,7 @@ import { Tabs } from '@heroui/react'
 import type { Page, ShopInfo } from '../../../shared/types'
 import AvatarDropdownMenu, { type AvatarMenuAction } from './AvatarDropdownMenu'
 
-export const PAGES: { id: Page; label: string }[] = [
+const PAGES: { id: Page; label: string }[] = [
   { id: 'dashboard', label: 'Dashboard' },
   { id: 'customers', label: 'Customers' },
   { id: 'workOrders', label: 'Work Orders' }
