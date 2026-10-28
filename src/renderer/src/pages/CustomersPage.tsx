@@ -1,7 +1,7 @@
 import { Magnifier, Persons, Plus } from '@gravity-ui/icons'
 import { Button, EmptyState, InputGroup, Spinner, Table, toast } from '@heroui/react'
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { memo, useCallback, useDeferredValue, useState } from 'react'
 import type { Customer, Vehicle } from '../../../shared/types'
 import ConfirmDialog from '../components/ConfirmDialog'
 import CustomerDetail from '../components/customers/CustomerDetail'
@@ -9,11 +9,13 @@ import CustomerFormModal from '../components/customers/CustomerFormModal'
 import VehicleFormModal from '../components/customers/VehicleFormModal'
 import { customerName, formatAddress, vehicleName } from '../lib/format'
 import { useDebounced } from '../hooks/useDebounced'
+import { usePagedLimit } from '../hooks/usePagedLimit'
 import { keys } from '../lib/queryClient'
 import { EMPTY_CUSTOMER, emptyVehicle } from '../lib/records'
 
-/** Results shown at once; refine the search to find others. */
-const LIMIT = 200
+/** Rows shown at first; more load as the list is scrolled. */
+const PAGE_SIZE = 100
+const NO_CUSTOMERS: Customer[] = []
 
 type Dialog = { kind: 'customer'; customer: Customer } | { kind: 'deleteCustomer'; customer: Customer } | { kind: 'vehicle'; vehicle: Vehicle } | { kind: 'deleteVehicle'; vehicle: Vehicle }
 
@@ -21,6 +23,86 @@ interface Props {
   /** Changes each time File > New Customer is chosen. */
   newCustomerRequest: number
 }
+
+interface TableProps {
+  customers: Customer[]
+  isPending: boolean
+  /** The search, for the empty-state message. */
+  query: string
+  selectedId: number | null
+  onSelect: (id: number | null) => void
+  onOpen: (customer: Customer) => void
+  /** More customers match than are shown. */
+  hasMore: boolean
+  isLoadingMore: boolean
+  onLoadMore: () => void
+}
+
+/** The results table, memoized so typing in the search field doesn't re-render every row. */
+const CustomerTable = memo(function CustomerTable({ customers, isPending, query, selectedId, onSelect, onOpen, hasMore, isLoadingMore, onLoadMore }: TableProps): React.ReactElement {
+  return (
+    <Table className="min-h-0 flex-1">
+      <Table.ScrollContainer className="h-full overflow-y-auto">
+        <Table.Content
+          aria-label="Customers"
+          selectionMode="single"
+          selectionBehavior="replace"
+          disallowEmptySelection={selectedId !== null}
+          selectedKeys={selectedId === null ? [] : [selectedId]}
+          onSelectionChange={(keys) => {
+            const [key] = keys === 'all' ? [] : [...keys]
+            onSelect(key === undefined ? null : Number(key))
+          }}
+          onRowAction={(key) => {
+            const c = customers.find((x) => x.id === key)
+            if (c) onOpen(c)
+          }}
+        >
+          <Table.Header className="sticky top-0 z-10 bg-surface">
+            <Table.Column isRowHeader>Name</Table.Column>
+            <Table.Column>Company</Table.Column>
+            <Table.Column>Phone</Table.Column>
+            <Table.Column>Address</Table.Column>
+          </Table.Header>
+          <Table.Body
+            renderEmptyState={() => (
+              <EmptyState className="flex flex-col items-center gap-2 py-10 text-center text-sm text-muted">
+                {isPending ? (
+                  <Spinner />
+                ) : query ? (
+                  `No customers match “${query}”.`
+                ) : (
+                  <>
+                    <Persons className="size-6" />
+                    No customers yet. Add one with New customer, or import your data with File › Import.
+                  </>
+                )}
+              </EmptyState>
+            )}
+          >
+            <Table.Collection items={customers}>
+              {(c) => (
+                <Table.Row id={c.id} className="cursor-default data-[selected=true]:bg-accent-soft data-[selected=true]:text-accent-soft-foreground">
+                  <Table.Cell>{customerName(c)}</Table.Cell>
+                  <Table.Cell>{c.company}</Table.Cell>
+                  <Table.Cell className="whitespace-nowrap tabular-nums">{c.phone}</Table.Cell>
+                  <Table.Cell>{formatAddress(c)}</Table.Cell>
+                </Table.Row>
+              )}
+            </Table.Collection>
+            {hasMore && (
+              <Table.LoadMore onLoadMore={onLoadMore} isLoading={isLoadingMore}>
+                <Table.LoadMoreContent>
+                  <Spinner size="sm" />
+                </Table.LoadMoreContent>
+              </Table.LoadMore>
+            )}
+          </Table.Body>
+        </Table.Content>
+      </Table.ScrollContainer>
+    </Table>
+  )
+})
 
 export default function CustomersPage({ newCustomerRequest }: Props): React.ReactElement {
   const queryClient = useQueryClient()
@@ -46,7 +128,10 @@ export default function CustomersPage({ newCustomerRequest }: Props): React.Reac
     if (newCustomerRequest > 0) open({ kind: 'customer', customer: EMPTY_CUSTOMER })
   }
 
-  const customers = useQuery({ queryKey: keys.customerSearch(query), queryFn: () => window.api.customers.search(query, LIMIT), placeholderData: keepPreviousData })
+  const [limit, loadMore] = usePagedLimit(query, PAGE_SIZE)
+  const customers = useQuery({ queryKey: [...keys.customerSearch(query), limit], queryFn: () => window.api.customers.search(query, limit), placeholderData: keepPreviousData })
+  // While the next page loads, the previous (shorter) page is still shown, so this stays false until it arrives.
+  const hasMore = (customers.data?.length ?? 0) >= limit
   const selected = useQuery({
     queryKey: ['customers', 'byId', selectedId],
     queryFn: () => window.api.customers.get(selectedId!),
@@ -69,8 +154,11 @@ export default function CustomersPage({ newCustomerRequest }: Props): React.Reac
     toast.success(`Deleted ${vehicleName(v)}`)
   }
 
-  const results = customers.data ?? []
-  const hasSearch = query.length > 0
+  const results = useDeferredValue(customers.data ?? NO_CUSTOMERS)
+  const openCustomer = useCallback((customer: Customer) => {
+    setDialogKey((k) => k + 1)
+    setDialog({ kind: 'customer', customer })
+  }, [])
 
   return (
     <div className="flex h-full min-h-0">
@@ -88,59 +176,7 @@ export default function CustomersPage({ newCustomerRequest }: Props): React.Reac
           </Button>
         </div>
 
-        <Table className="min-h-0 flex-1">
-          <Table.ScrollContainer className="h-full overflow-y-auto">
-            <Table.Content
-              aria-label="Customers"
-              selectionMode="single"
-              selectionBehavior="replace"
-              disallowEmptySelection={selectedId !== null}
-              selectedKeys={selectedId === null ? [] : [selectedId]}
-              onSelectionChange={(keys) => {
-                const [key] = keys === 'all' ? [] : [...keys]
-                setSelectedId(key === undefined ? null : Number(key))
-              }}
-              onRowAction={(key) => {
-                const c = results.find((x) => x.id === key)
-                if (c) open({ kind: 'customer', customer: c })
-              }}
-            >
-              <Table.Header className="sticky top-0 z-10 bg-surface">
-                <Table.Column isRowHeader>Name</Table.Column>
-                <Table.Column>Company</Table.Column>
-                <Table.Column>Phone</Table.Column>
-                <Table.Column>Address</Table.Column>
-              </Table.Header>
-              <Table.Body
-                items={results}
-                renderEmptyState={() => (
-                  <EmptyState className="flex flex-col items-center gap-2 py-10 text-center text-sm text-muted">
-                    {customers.isPending ? (
-                      <Spinner />
-                    ) : hasSearch ? (
-                      `No customers match “${query}”.`
-                    ) : (
-                      <>
-                        <Persons className="size-6" />
-                        No customers yet. Add one with New customer, or import your data with File › Import.
-                      </>
-                    )}
-                  </EmptyState>
-                )}
-              >
-                {(c) => (
-                  <Table.Row id={c.id} className="cursor-default data-[selected=true]:bg-accent-soft data-[selected=true]:text-accent-soft-foreground">
-                    <Table.Cell>{customerName(c)}</Table.Cell>
-                    <Table.Cell>{c.company}</Table.Cell>
-                    <Table.Cell className="whitespace-nowrap tabular-nums">{c.phone}</Table.Cell>
-                    <Table.Cell>{formatAddress(c)}</Table.Cell>
-                  </Table.Row>
-                )}
-              </Table.Body>
-            </Table.Content>
-          </Table.ScrollContainer>
-        </Table>
-        {results.length >= LIMIT && <p className="text-xs text-muted">Showing the first {LIMIT} customers. Search to find others.</p>}
+        <CustomerTable customers={results} isPending={customers.isPending} query={query} selectedId={selectedId} onSelect={setSelectedId} onOpen={openCustomer} hasMore={hasMore} isLoadingMore={customers.isFetching} onLoadMore={loadMore} />
       </section>
 
       <aside className="w-[520px] shrink-0 overflow-y-auto p-4">

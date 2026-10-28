@@ -191,3 +191,36 @@ test('searches and filters the list, and deleting closes an open editor', async 
   await expect.poll(ids).toEqual(['3'])
   await expect.poll(() => openTabs(page)).toEqual(['All work orders'])
 })
+
+test.describe('with a full database', () => {
+  test.use({ appOptions: { data: 'demo', settings: {} } })
+
+  test('loads more work orders as the list is scrolled, and keeps the search when switching pages', async ({ page }) => {
+    await page.getByRole('tab', { name: 'Work Orders' }).click()
+    const grid = page.getByRole('grid', { name: 'Work orders' })
+    const rowCount = (): Promise<number> => grid.getByRole('rowheader').count()
+    await expect.poll(rowCount).toBe(50)
+    // Scroll to the end until everything has loaded (the demo data has a few hundred).
+    await expect
+      .poll(async () => {
+        await grid.evaluate((el) => {
+          const scroller = el.closest('[data-slot=table-scroll-container]')!
+          scroller.scrollTop = scroller.scrollHeight
+        })
+        return rowCount()
+      })
+      .toBeGreaterThan(200)
+
+    // A new search starts back at the first page.
+    const search = page.getByRole('textbox', { name: 'Search work orders' })
+    await search.fill('kim')
+    await expect.poll(rowCount).toBeLessThanOrEqual(50)
+    const found = await rowCount()
+
+    // Pages stay as they were left.
+    await page.getByRole('tab', { name: 'Customers' }).click()
+    await page.getByRole('tab', { name: 'Work Orders' }).click()
+    await expect(search).toHaveValue('kim')
+    expect(await rowCount()).toBe(found)
+  })
+})

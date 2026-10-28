@@ -1,6 +1,6 @@
 import { Toast, toast } from '@heroui/react'
 import { useQueryClient } from '@tanstack/react-query'
-import { useCallback, useState } from 'react'
+import { useCallback, useState, type ReactNode } from 'react'
 import type { Page } from '../../shared/types'
 import AppBar from './components/AppBar'
 import type { AvatarMenuAction } from './components/AvatarDropdownMenu'
@@ -20,6 +20,21 @@ import WorkOrdersPage from './pages/WorkOrdersPage'
 function isEditingText(): boolean {
   const el = document.activeElement
   return el instanceof HTMLTextAreaElement || (el instanceof HTMLInputElement && !['checkbox', 'radio', 'button', 'submit'].includes(el.type)) || (el instanceof HTMLElement && el.isContentEditable)
+}
+
+/**
+ * Mounts a page the first time it's shown, then only hides it, so switching back is instant and the
+ * page keeps its search, selection, and scroll position.
+ */
+function KeepAlive({ active, children }: { active: boolean; children: ReactNode }): React.ReactElement | null {
+  const [visited, setVisited] = useState(active)
+  if (active && !visited) setVisited(true)
+  if (!visited && !active) return null
+  return (
+    <div className="h-full" hidden={!active}>
+      {children}
+    </div>
+  )
 }
 
 interface ShellProps {
@@ -98,9 +113,15 @@ function Shell({ page, setPage }: ShellProps): React.ReactElement {
       <main className="min-h-0 flex-1 overflow-auto">
         {/* Keyed wrapper, not <main> itself: re-keying the <main> landmark left the old page in the DOM. */}
         <div key={dataVersion} className="contents">
-          {page === 'dashboard' && <DashboardPage />}
-          {page === 'customers' && <CustomersPage newCustomerRequest={newCustomerRequest} />}
-          {page === 'workOrders' && <WorkOrdersPage printRequest={printRequest} />}
+          <KeepAlive active={page === 'dashboard'}>
+            <DashboardPage />
+          </KeepAlive>
+          <KeepAlive active={page === 'customers'}>
+            <CustomersPage newCustomerRequest={newCustomerRequest} />
+          </KeepAlive>
+          <KeepAlive active={page === 'workOrders'}>
+            <WorkOrdersPage printRequest={printRequest} />
+          </KeepAlive>
         </div>
       </main>
       {settings && <PreferencesModal key={preferencesKey} isOpen={modal === 'preferences'} onOpenChange={onOpenChange} settings={settings} />}

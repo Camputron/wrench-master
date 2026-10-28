@@ -1,18 +1,21 @@
 import { FileText, Magnifier, Plus, TrashBin } from '@gravity-ui/icons'
 import { Button, Chip, EmptyState, InputGroup, Label, ListBox, Select, Spinner, Table, toast } from '@heroui/react'
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { memo, useDeferredValue, useState } from 'react'
 import { balance } from '../../../../shared/billing'
 import type { DateFilter, WorkOrder, WorkOrderFilter } from '../../../../shared/types'
 import { useEditors } from '../../editors/editorsContext'
 import { keyFor } from '../../editors/editorsReducer'
 import { useDebounced } from '../../hooks/useDebounced'
+import { usePagedLimit } from '../../hooks/usePagedLimit'
 import { customerName, formatDate, formatMoney, todayIso, vehicleName, workOrderTotal } from '../../lib/format'
 import { keys } from '../../lib/queryClient'
 import ConfirmDialog from '../ConfirmDialog'
 import { DateInput } from '../fields/Fields'
 
-const LIMIT = 200
+/** Rows rendered at first; more load as the list is scrolled. Each row is costly to render, so keep this modest. */
+const PAGE_SIZE = 50
+const NO_WORK_ORDERS: WorkOrder[] = []
 
 type Status = 'all' | 'open' | 'completed'
 type DateMode = 'any' | DateFilter['mode']
@@ -58,6 +61,106 @@ function buildDateFilter(mode: DateMode, from: string | null, to: string | null)
   return { mode, date: from }
 }
 
+interface TableProps {
+  workOrders: WorkOrder[]
+  isPending: boolean
+  filtered: boolean
+  /** More rows match than are shown. */
+  hasMore: boolean
+  isLoadingMore: boolean
+  onLoadMore: () => void
+  onOpen: (id: number) => void
+  onDelete: (wo: WorkOrder) => void
+}
+
+/**
+ * The results table. Memoized because it's the slow part: re-rendering every row on each keystroke in
+ * the search field (or each change in an open editor) made the app feel sluggish.
+ */
+const WorkOrderTable = memo(function WorkOrderTable({ workOrders, isPending, filtered, hasMore, isLoadingMore, onLoadMore, onOpen, onDelete }: TableProps): React.ReactElement {
+  return (
+    <Table className="min-h-0 flex-1">
+      <Table.ScrollContainer className="h-full overflow-y-auto">
+        <Table.Content aria-label="Work orders" onRowAction={(key) => void onOpen(Number(key))}>
+          <Table.Header className="sticky top-0 z-10 bg-surface">
+            <Table.Column isRowHeader>#</Table.Column>
+            <Table.Column>Created</Table.Column>
+            <Table.Column>Customer</Table.Column>
+            <Table.Column>Vehicle</Table.Column>
+            <Table.Column className="text-end">Total</Table.Column>
+            <Table.Column className="text-end">Balance</Table.Column>
+            <Table.Column>Status</Table.Column>
+            <Table.Column className="w-0">
+              <span className="sr-only">Actions</span>
+            </Table.Column>
+          </Table.Header>
+          <Table.Body
+            renderEmptyState={() => (
+              <EmptyState className="flex flex-col items-center gap-2 py-10 text-center text-sm text-muted">
+                {isPending ? (
+                  <Spinner />
+                ) : filtered ? (
+                  'No work orders match these filters.'
+                ) : (
+                  <>
+                    <FileText className="size-6" />
+                    No work orders yet. Start one with New work order.
+                  </>
+                )}
+              </EmptyState>
+            )}
+          >
+            <Table.Collection items={workOrders}>
+              {(wo) => {
+                const due = balance(wo)
+                return (
+                  <Table.Row id={wo.id} className="cursor-default">
+                    <Table.Cell className="tabular-nums">{wo.id}</Table.Cell>
+                    <Table.Cell className="whitespace-nowrap tabular-nums">{formatDate(wo.dateCreated)}</Table.Cell>
+                    <Table.Cell>
+                      <div>{customerName(wo.customer)}</div>
+                      {wo.customer.company && (wo.customer.firstName || wo.customer.lastName) && <div className="text-xs text-muted">{wo.customer.company}</div>}
+                    </Table.Cell>
+                    <Table.Cell>
+                      <div>{vehicleName(wo.vehicle)}</div>
+                      {wo.vehicle.licensePlate && <div className="font-mono text-xs text-muted">{wo.vehicle.licensePlate}</div>}
+                    </Table.Cell>
+                    <Table.Cell className="text-end tabular-nums">{workOrderTotal(wo)}</Table.Cell>
+                    <Table.Cell className={`text-end tabular-nums ${due > 0.004 ? 'text-warning' : 'text-muted'}`}>{formatMoney(Math.abs(due) < 0.005 ? 0 : due)}</Table.Cell>
+                    <Table.Cell>
+                      {wo.dateCompleted ? (
+                        <Chip size="sm" variant="soft" color="success">
+                          Completed {formatDate(wo.dateCompleted)}
+                        </Chip>
+                      ) : (
+                        <Chip size="sm" variant="soft" color="warning">
+                          Open
+                        </Chip>
+                      )}
+                    </Table.Cell>
+                    <Table.Cell>
+                      <Button size="sm" variant="ghost" isIconOnly aria-label={`Delete work order #${wo.id}`} onPress={() => onDelete(wo)}>
+                        <TrashBin className="size-4 text-danger" />
+                      </Button>
+                    </Table.Cell>
+                  </Table.Row>
+                )
+              }}
+            </Table.Collection>
+            {hasMore && (
+              <Table.LoadMore onLoadMore={onLoadMore} isLoading={isLoadingMore}>
+                <Table.LoadMoreContent>
+                  <Spinner size="sm" />
+                </Table.LoadMoreContent>
+              </Table.LoadMore>
+            )}
+          </Table.Body>
+        </Table.Content>
+      </Table.ScrollContainer>
+    </Table>
+  )
+})
+
 /** All work orders, with search and filters. Double-click (or Enter) opens one. */
 export default function WorkOrderList(): React.ReactElement {
   const queryClient = useQueryClient()
@@ -70,9 +173,14 @@ export default function WorkOrderList(): React.ReactElement {
   const [toDelete, setToDelete] = useState<WorkOrder | null>(null)
   const text = useDebounced(search.trim(), 200)
 
-  const filter: WorkOrderFilter = { text, status: status === 'all' ? undefined : status, date: buildDateFilter(dateMode, from, to), limit: LIMIT }
+  const criteria: Omit<WorkOrderFilter, 'limit'> = { text, status: status === 'all' ? undefined : status, date: buildDateFilter(dateMode, from, to) }
+  const [limit, loadMore] = usePagedLimit(JSON.stringify(criteria), PAGE_SIZE)
+  const filter: WorkOrderFilter = { ...criteria, limit }
   const workOrders = useQuery({ queryKey: [...keys.workOrders, 'list', filter], queryFn: () => window.api.workOrders.filter(filter), placeholderData: keepPreviousData })
-  const results = workOrders.data ?? []
+  // While the next page loads, the previous (shorter) page is still shown, so this stays false until it arrives.
+  const hasMore = (workOrders.data?.length ?? 0) >= limit
+  // Deferred so the table re-renders in the background and typing in the search field never waits for it.
+  const results = useDeferredValue(workOrders.data ?? NO_WORK_ORDERS)
   const filtered = !!(text || filter.status || filter.date)
 
   const deleteWorkOrder = async (wo: WorkOrder): Promise<void> => {
@@ -102,78 +210,7 @@ export default function WorkOrderList(): React.ReactElement {
         </Button>
       </div>
 
-      <Table className="min-h-0 flex-1">
-        <Table.ScrollContainer className="h-full overflow-y-auto">
-          <Table.Content aria-label="Work orders" onRowAction={(key) => void openWorkOrder(Number(key))}>
-            <Table.Header className="sticky top-0 z-10 bg-surface">
-              <Table.Column isRowHeader>#</Table.Column>
-              <Table.Column>Created</Table.Column>
-              <Table.Column>Customer</Table.Column>
-              <Table.Column>Vehicle</Table.Column>
-              <Table.Column className="text-end">Total</Table.Column>
-              <Table.Column className="text-end">Balance</Table.Column>
-              <Table.Column>Status</Table.Column>
-              <Table.Column className="w-0">
-                <span className="sr-only">Actions</span>
-              </Table.Column>
-            </Table.Header>
-            <Table.Body
-              items={results}
-              renderEmptyState={() => (
-                <EmptyState className="flex flex-col items-center gap-2 py-10 text-center text-sm text-muted">
-                  {workOrders.isPending ? (
-                    <Spinner />
-                  ) : filtered ? (
-                    'No work orders match these filters.'
-                  ) : (
-                    <>
-                      <FileText className="size-6" />
-                      No work orders yet. Start one with New work order.
-                    </>
-                  )}
-                </EmptyState>
-              )}
-            >
-              {(wo) => {
-                const due = balance(wo)
-                return (
-                  <Table.Row id={wo.id} className="cursor-default">
-                    <Table.Cell className="tabular-nums">{wo.id}</Table.Cell>
-                    <Table.Cell className="whitespace-nowrap tabular-nums">{formatDate(wo.dateCreated)}</Table.Cell>
-                    <Table.Cell>
-                      <div>{customerName(wo.customer)}</div>
-                      {wo.customer.company && (wo.customer.firstName || wo.customer.lastName) && <div className="text-xs text-muted">{wo.customer.company}</div>}
-                    </Table.Cell>
-                    <Table.Cell>
-                      <div>{vehicleName(wo.vehicle)}</div>
-                      {wo.vehicle.licensePlate && <div className="font-mono text-xs text-muted">{wo.vehicle.licensePlate}</div>}
-                    </Table.Cell>
-                    <Table.Cell className="text-end tabular-nums">{workOrderTotal(wo)}</Table.Cell>
-                    <Table.Cell className={`text-end tabular-nums ${due > 0.004 ? 'text-warning' : 'text-muted'}`}>{formatMoney(Math.abs(due) < 0.005 ? 0 : due)}</Table.Cell>
-                    <Table.Cell>
-                      {wo.dateCompleted ? (
-                        <Chip size="sm" variant="soft" color="success">
-                          Completed {formatDate(wo.dateCompleted)}
-                        </Chip>
-                      ) : (
-                        <Chip size="sm" variant="soft" color="warning">
-                          Open
-                        </Chip>
-                      )}
-                    </Table.Cell>
-                    <Table.Cell>
-                      <Button size="sm" variant="ghost" isIconOnly aria-label={`Delete work order #${wo.id}`} onPress={() => setToDelete(wo)}>
-                        <TrashBin className="size-4 text-danger" />
-                      </Button>
-                    </Table.Cell>
-                  </Table.Row>
-                )
-              }}
-            </Table.Body>
-          </Table.Content>
-        </Table.ScrollContainer>
-      </Table>
-      {results.length >= LIMIT && <p className="text-xs text-muted">Showing the {LIMIT} most recent matches. Narrow the search to find others.</p>}
+      <WorkOrderTable workOrders={results} isPending={workOrders.isPending} filtered={filtered} hasMore={hasMore} isLoadingMore={workOrders.isFetching} onLoadMore={loadMore} onOpen={openWorkOrder} onDelete={setToDelete} />
 
       {toDelete && (
         <ConfirmDialog isOpen onOpenChange={(open) => !open && setToDelete(null)} title={`Delete work order #${toDelete.id}?`} confirmLabel="Delete work order" onConfirm={() => deleteWorkOrder(toDelete)}>
