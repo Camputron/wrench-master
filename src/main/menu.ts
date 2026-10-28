@@ -12,6 +12,8 @@ export interface MenuHandlers {
   zoom(step: 1 | -1 | 0): void
   importFromJavaApp(): void
   exportData(kind: ExportKind): void
+  backUpNow(): void
+  restoreBackup(): void
 }
 
 export function buildMenu(h: MenuHandlers): Menu {
@@ -48,6 +50,8 @@ export function buildMenu(h: MenuHandlers): Menu {
         { type: 'separator' },
         { label: 'Save Work Order', accelerator: 'CmdOrCtrl+S', click: () => h.send({ type: 'save' }) },
         { label: 'Print Work Order…', accelerator: 'CmdOrCtrl+P', click: () => h.send({ type: 'print' }) },
+        // Replaces the standard Close Window item (also Cmd+W); the renderer closes the window when no work order is shown.
+        { label: 'Close Work Order', accelerator: 'CmdOrCtrl+W', click: () => h.send({ type: 'closeWorkOrder' }) },
         { type: 'separator' },
         { label: 'Import from Autoshop Invoice Manager…', click: () => h.importFromJavaApp() },
         {
@@ -60,7 +64,9 @@ export function buildMenu(h: MenuHandlers): Menu {
           ]
         },
         { type: 'separator' },
-        ...(isMac ? [{ role: 'close' } satisfies MenuItemConstructorOptions] : [preferences, { type: 'separator' } satisfies MenuItemConstructorOptions, { role: 'quit', label: 'Exit' } satisfies MenuItemConstructorOptions])
+        { label: 'Back Up Now', click: () => h.backUpNow() },
+        { label: 'Restore from Backup…', click: () => h.restoreBackup() },
+        ...(isMac ? [] : [{ type: 'separator' } satisfies MenuItemConstructorOptions, preferences, { type: 'separator' } satisfies MenuItemConstructorOptions, { role: 'quit', label: 'Exit' } satisfies MenuItemConstructorOptions])
       ]
     },
     {
@@ -73,7 +79,9 @@ export function buildMenu(h: MenuHandlers): Menu {
         { role: 'cut' },
         { role: 'copy' },
         { role: 'paste' },
-        { role: 'selectAll' }
+        { role: 'selectAll' },
+        { type: 'separator' },
+        { label: 'Find', accelerator: 'CmdOrCtrl+F', click: () => h.send({ type: 'find' }) }
       ]
     },
     {

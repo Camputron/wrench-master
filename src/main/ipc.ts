@@ -1,4 +1,7 @@
 import { app, BrowserWindow, ipcMain, shell } from 'electron'
+import { mkdirSync } from 'fs'
+import { listBackups } from './backups'
+import { chooseBackupFolder, restoreFromBackup } from './restoreBackup'
 import type { ApiHandlers } from '../shared/api'
 import type { WorkOrder } from '../shared/types'
 import type { Services } from './services'
@@ -48,9 +51,11 @@ export function createHandlers(services: Services): ApiHandlers {
         return saved
       },
       delete: (id): void => {
+        if (db().workOrders.getById(id)?.payments.length) throw new Error('Work orders with payments can’t be deleted. Void it instead.')
         db().workOrders.delete(id)
         session.forget(id)
       },
+      setVoided: (id, voided) => db().workOrders.setVoided(id, voided === true),
       stats: () => db().workOrders.stats(),
       years: () => db().workOrders.years(),
       incomeByMonth: (year) => db().workOrders.incomeByMonth(year)
@@ -68,6 +73,24 @@ export function createHandlers(services: Services): ApiHandlers {
       html: (wo) => invoiceHtml(wo, settings.get()),
       print: (wo) => printInvoice(wo, settings.get()),
       savePdf: (wo) => saveInvoicePdf(BrowserWindow.getFocusedWindow(), wo, settings.get())
+    },
+    backups: {
+      status: () => {
+        const folder = services.backupFolder()
+        const last = listBackups(folder)[0]
+        return { folder, isDefault: !settings.get().backupFolder, last: last ? { path: last.path, date: last.date.toISOString() } : null }
+      },
+      backUpNow: () => services.backUp('manual'),
+      chooseFolder: () => chooseBackupFolder(BrowserWindow.getFocusedWindow(), services),
+      showFolder: async () => {
+        const folder = services.backupFolder()
+        mkdirSync(folder, { recursive: true })
+        await shell.openPath(folder)
+      },
+      restore: async () => {
+        const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
+        if (win) await restoreFromBackup(win, services)
+      }
     },
     app: {
       showItemInFolder: (path) => shell.showItemInFolder(path),

@@ -57,6 +57,6 @@ test('imports a database and preferences from the Java app', async ({ app, page,
   await expect.poll(() => app.evaluate(() => (globalThis as unknown as { shown: string[] }).shown)).toEqual(['Replace all current data?', 'Import complete'])
   await expect(page.getByRole('grid', { name: 'Customers' }).getByRole('rowheader')).toHaveText(['Doe, Jane', 'Smith, Bob'])
   expect(await page.evaluate(() => window.api.settings.get().then((s) => [s.shop.company, s.shop.state, s.taxRate]))).toEqual(['Old Shop', 'NEW_JERSEY', 0.06625])
-  // The previous (empty) database was backed up next to the new one.
-  expect(readdirSync(dataDir).some((f) => f.startsWith('autoshop-backup-'))).toBe(true)
+  // The previous (empty) database was backed up to the Backups folder next to the new one.
+  expect(readdirSync(join(dataDir, 'Backups')).some((f) => f.endsWith('-before-import.db'))).toBe(true)
 })

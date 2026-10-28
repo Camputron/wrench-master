@@ -38,6 +38,10 @@ export function totalPayments(wo: Pick<WorkOrder, 'payments'>): number {
   return wo.payments.reduce((sum, p) => sum + p.amount, 0)
 }
 
+/**
+ * What's still owed, to the cent. Rounded because payments are made against the rounded total: paying
+ * $147.68 on a $147.6758 bill settles it, rather than leaving it "overpaid" by a fraction of a cent.
+ */
 export function balance(wo: Totals): number {
-  return bill(wo) - totalPayments(wo)
+  return Math.round((bill(wo) - totalPayments(wo)) * 100) / 100 + 0
 }

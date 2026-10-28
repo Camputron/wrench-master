@@ -7,6 +7,7 @@ import type { AvatarMenuAction } from './components/AvatarDropdownMenu'
 import AboutModal from './components/modals/AboutModal'
 import PreferencesModal from './components/modals/PreferencesModal'
 import { useEditors } from './editors/editorsContext'
+import { isDirty } from './editors/editorsReducer'
 import { useSaveWorkOrder } from './editors/useSaveWorkOrder'
 import WorkOrderEditorsProvider from './editors/WorkOrderEditorsProvider'
 import { useAppEvent } from './hooks/useAppEvent'
@@ -15,6 +16,17 @@ import { useSettings } from './hooks/useSettings'
 import CustomersPage from './pages/CustomersPage'
 import DashboardPage from './pages/DashboardPage'
 import WorkOrdersPage from './pages/WorkOrdersPage'
+
+const isMac = navigator.userAgent.includes('Mac')
+
+/** Focuses a search field once it's on screen (after the page or list it's on has been shown). */
+function focusSearch(label: string): void {
+  requestAnimationFrame(() => {
+    const input = document.querySelector<HTMLInputElement>(`input[aria-label="${label}"]`)
+    input?.focus()
+    input?.select()
+  })
+}
 
 /** True when keyboard focus is in a text field, where Undo/Redo should edit the text. */
 function isEditingText(): boolean {
@@ -56,6 +68,8 @@ function Shell({ page, setPage }: ShellProps): React.ReactElement {
   const [newCustomerRequest, setNewCustomerRequest] = useState(0)
   /** Bumped by File > Print Work Order. */
   const [printRequest, setPrintRequest] = useState(0)
+  /** Bumped by File > Close Work Order when the work order has unsaved changes, so its editor asks first. */
+  const [closeRequest, setCloseRequest] = useState(0)
 
   const open = (which: AvatarMenuAction): void => {
     if (which === 'preferences') setPreferencesKey((k) => k + 1)
@@ -85,6 +99,20 @@ function Shell({ page, setPage }: ShellProps): React.ReactElement {
       case 'print':
         if (shownEditor) setPrintRequest((n) => n + 1)
         else toast.info('Open a work order to print it.')
+        break
+      case 'closeWorkOrder':
+        // Cmd+W closes the window on macOS when there's no work order to close, as it does in other apps.
+        if (shownEditor && isDirty(shownEditor)) setCloseRequest((n) => n + 1)
+        else if (shownEditor) editors.close(shownEditor.key)
+        else if (isMac) window.close()
+        break
+      case 'find':
+        if (page === 'customers') focusSearch('Search customers')
+        else {
+          setPage('workOrders')
+          editors.showList()
+          focusSearch('Search work orders')
+        }
         break
       case 'undo':
       case 'redo':
@@ -120,7 +148,7 @@ function Shell({ page, setPage }: ShellProps): React.ReactElement {
             <CustomersPage newCustomerRequest={newCustomerRequest} />
           </KeepAlive>
           <KeepAlive active={page === 'workOrders'}>
-            <WorkOrdersPage printRequest={printRequest} />
+            <WorkOrdersPage printRequest={printRequest} closeRequest={closeRequest} />
           </KeepAlive>
         </div>
       </main>

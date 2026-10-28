@@ -20,10 +20,14 @@ describe('billing', () => {
     expect(bill(wo)).toBeCloseTo(235 + 225 * 0.08625, 10)
   })
 
-  it('subtracts payments for the balance, which can go negative when overpaid', () => {
+  it('subtracts payments for the balance, to the cent, which can go negative when overpaid', () => {
     expect(totalPayments(wo)).toBe(150)
-    expect(balance(wo)).toBeCloseTo(bill(wo) - 150, 10)
+    expect(balance(wo)).toBe(Math.round((bill(wo) - 150) * 100) / 100)
     expect(balance({ ...wo, payments: [pay(1000)] })).toBeLessThan(0)
+    // Paying the rounded total settles it exactly (not "overpaid" by a fraction of a cent, and never -0).
+    const rounded = Math.round(bill(wo) * 100) / 100
+    expect(bill(wo)).not.toBe(rounded)
+    expect(Object.is(balance({ ...wo, payments: [pay(rounded)] }), 0)).toBe(true)
   })
 
   it('handles an empty work order', () => {

@@ -69,6 +69,8 @@ The Windows installer can be built on a Mac. Builds aren't code-signed yet, so W
 
 An installed copy keeps its data (database, settings) in `Wrench Master` in the same locations as the dev folder above, without `(Dev)`. Uninstalling doesn't delete it. To move data over from the Java version, use **File › Import from Autoshop Invoice Manager**.
 
+The app backs up the database once a day to a `Backups` folder next to it (or a folder chosen in **Preferences › Backups**), keeping the last 14 daily backups. **File › Back Up Now** and **File › Restore from Backup…** do the same on demand; restoring saves a backup of the current data first. Backup files are ordinary copies of the database, named by date, e.g. `autoshop-20261027-093000-auto.db`.
+
 ## License
 
 [MIT License](LICENSE)

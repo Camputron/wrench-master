@@ -1,3 +1,4 @@
+import { isAbsolute } from 'path'
 import { stateByKey } from '../shared/states'
 import { ZOOM_LEVELS, type Settings, type SettingsPatch, type ShopInfo, type Theme } from '../shared/types'
 import { JsonFile } from './jsonFile'
@@ -8,7 +9,8 @@ export const DEFAULT_SETTINGS: Settings = {
   taxRate: 0.08625,
   theme: 'system',
   zoom: 1,
-  confirmExit: false
+  confirmExit: false,
+  backupFolder: ''
 }
 
 const THEMES: Theme[] = ['light', 'dark', 'system']
@@ -30,6 +32,7 @@ export function applyPatch(base: Settings, patch: SettingsPatch | undefined): Se
   if (patch.theme && THEMES.includes(patch.theme)) next.theme = patch.theme
   if (isNumber(patch.zoom) && (ZOOM_LEVELS as readonly number[]).includes(patch.zoom)) next.zoom = patch.zoom
   if (typeof patch.confirmExit === 'boolean') next.confirmExit = patch.confirmExit
+  if (typeof patch.backupFolder === 'string' && (patch.backupFolder === '' || isAbsolute(patch.backupFolder))) next.backupFolder = patch.backupFolder
   return next
 }
 

@@ -93,6 +93,13 @@ create table if not exists work_order_payment (
   amount decimal(10,2),
   foreign key (work_order_id) references work_order(work_order_id));
 
+-- Not in the Java app (which ignores it): work orders voided instead of deleted because they have
+-- payments. A separate table rather than a column, so the Java app's own tables stay as it made them.
+create table if not exists work_order_void (
+  work_order_id integer primary key,
+  date_voided date,
+  foreign key (work_order_id) references work_order(work_order_id));
+
 create table if not exists counter (id varchar(16) primary key, value integer);
 insert or ignore into counter (id, value) values ('work.order.id', 1);
 

@@ -1,11 +1,12 @@
-import { ArrowUturnCcwLeft, ArrowUturnCwRight, FloppyDisk, Printer } from '@gravity-ui/icons'
-import { Button, Chip } from '@heroui/react'
+import { ArrowRotateLeft, ArrowUturnCcwLeft, ArrowUturnCwRight, Ban, FloppyDisk, Printer } from '@gravity-ui/icons'
+import { Button } from '@heroui/react'
 import { useState } from 'react'
 import { balance, laborSubtotal, partSubtotal } from '../../../../shared/billing'
 import type { WorkOrder } from '../../../../shared/types'
 import { useEditors } from '../../editors/editorsContext'
 import { isDirty, type Editor } from '../../editors/editorsReducer'
 import { useSaveWorkOrder } from '../../editors/useSaveWorkOrder'
+import { useSetVoided } from '../../editors/useSetVoided'
 import { useSettings } from '../../hooks/useSettings'
 import { formatDate, formatMoney, todayIso } from '../../lib/format'
 import { emptyLabor, emptyPart, emptyPayment, validateWorkOrder } from '../../lib/records'
@@ -16,6 +17,7 @@ import LineTable from './LineTable'
 import PartFormModal from './PartFormModal'
 import PaymentFormModal from './PaymentFormModal'
 import PrintPreviewModal from './PrintPreviewModal'
+import StatusChip from './StatusChip'
 import SummaryPanel from './SummaryPanel'
 
 type LineKind = 'parts' | 'labor' | 'payments'
@@ -28,11 +30,14 @@ interface Props {
   editor: Editor
   /** Changes each time File > Print is chosen. */
   printRequest: number
+  /** Changes each time File > Close Work Order is chosen while this work order has unsaved changes. */
+  closeRequest: number
 }
 
-export default function WorkOrderEditor({ editor, printRequest }: Props): React.ReactElement {
+export default function WorkOrderEditor({ editor, printRequest, closeRequest }: Props): React.ReactElement {
   const { edit, undo, redo, close } = useEditors()
   const saveWithFeedback = useSaveWorkOrder()
+  const setVoided = useSetVoided()
   const settings = useSettings()
   const [dialog, setDialog] = useState<Dialog | null>(null)
   const [dialogKey, setDialogKey] = useState(0)
@@ -52,6 +57,12 @@ export default function WorkOrderEditor({ editor, printRequest }: Props): React.
   if (printRequest !== handledPrint) {
     setHandledPrint(printRequest)
     open({ kind: 'print' })
+  }
+  // Same for File > Close Work Order with unsaved changes: ask first. (Without changes, the app closes it directly.)
+  const [handledClose, setHandledClose] = useState(closeRequest)
+  if (closeRequest !== handledClose) {
+    setHandledClose(closeRequest)
+    open({ kind: 'close' })
   }
   const onDialogOpenChange = (isOpen: boolean): void => {
     if (!isOpen) setDialog(null)
@@ -73,15 +84,7 @@ export default function WorkOrderEditor({ editor, printRequest }: Props): React.
     <div className="flex min-h-full flex-col">
       <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-separator bg-background/90 px-4 py-2 backdrop-blur">
         <h2 className="text-lg font-semibold">{title}</h2>
-        {wo.dateCompleted ? (
-          <Chip size="sm" variant="soft" color="success">
-            Completed {formatDate(wo.dateCompleted)}
-          </Chip>
-        ) : (
-          <Chip size="sm" variant="soft" color="warning">
-            Open
-          </Chip>
-        )}
+        <StatusChip workOrder={wo} />
         {dirty && <span className="text-sm text-muted">Unsaved changes</span>}
         <div className="ml-auto flex items-center gap-2">
           <Button size="sm" variant="ghost" isIconOnly aria-label="Undo" isDisabled={editor.past.length === 0} onPress={() => undo(key)}>
@@ -97,17 +100,29 @@ export default function WorkOrderEditor({ editor, printRequest }: Props): React.
           <Button size="sm" variant="tertiary" onPress={() => (dirty ? open({ kind: 'close' }) : close(key))}>
             Close
           </Button>
-          <Button size="sm" variant="secondary" isDisabled={saving} onPress={() => doSave(true)}>
+          <Button size="sm" variant="secondary" isDisabled={saving || !!wo.dateVoided} onPress={() => doSave(true)}>
             Save &amp; close
           </Button>
-          <Button size="sm" isPending={saving} onPress={() => doSave(false)}>
+          <Button size="sm" isPending={saving} isDisabled={!!wo.dateVoided} onPress={() => doSave(false)}>
             <FloppyDisk className="size-4" />
             Save
           </Button>
         </div>
       </header>
 
-      <div className="flex gap-4 p-4">
+      {wo.dateVoided && (
+        <div role="status" className="mx-4 mt-4 flex items-center gap-3 rounded-2xl bg-danger-soft p-3 text-sm text-danger-soft-foreground">
+          <Ban className="size-5 shrink-0" />
+          <p className="flex-1">Voided on {formatDate(wo.dateVoided)}. It’s kept for your records, but left out of totals and the dashboard, and can’t be changed. Restore it to make changes.</p>
+          <Button size="sm" variant="secondary" onPress={() => setVoided(wo, false)}>
+            <ArrowRotateLeft className="size-4" />
+            Restore
+          </Button>
+        </div>
+      )}
+
+      {/* A voided work order is read-only: inert blocks clicks, typing, and focus in everything below. */}
+      <div className={`flex gap-4 p-4 ${wo.dateVoided ? 'opacity-60' : ''}`} inert={!!wo.dateVoided}>
         <div className="flex min-w-0 flex-1 flex-col gap-4">
           <CustomerVehicleSection workOrder={wo} onChange={typing} />
           <LineTable

@@ -35,7 +35,7 @@ export default function WorkOrderSummaryTable({ title, workOrders, emptyText }: 
                   <Table.Cell>{vehicleName(wo.vehicle)}</Table.Cell>
                   <Table.Cell className="whitespace-nowrap tabular-nums">{formatDate(wo.dateCreated)}</Table.Cell>
                   <Table.Cell className="text-end tabular-nums">{workOrderTotal(wo)}</Table.Cell>
-                  <Table.Cell className={`text-end tabular-nums ${due > 0.004 ? 'text-warning' : 'text-muted'}`}>{formatMoney(Math.abs(due) < 0.005 ? 0 : due)}</Table.Cell>
+                  {wo.dateVoided ? <Table.Cell className="text-end text-muted">Voided</Table.Cell> : <Table.Cell className={`text-end tabular-nums ${due > 0.004 ? 'text-warning' : 'text-muted'}`}>{formatMoney(Math.abs(due) < 0.005 ? 0 : due)}</Table.Cell>}
                 </Table.Row>
               )
             }}

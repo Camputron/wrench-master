@@ -11,6 +11,9 @@ const HEADER_COLUMNS = `work_order_id, date_created, date_completed, customer_id
   vehicle_vin, vehicle_year, vehicle_make, vehicle_model, vehicle_license_plate, vehicle_color,
   vehicle_engine, vehicle_transmission, vehicle_mileage_in, vehicle_mileage_out, tax_rate`
 
+/** SQL condition: the work order (`work_order_id` in scope) hasn't been voided. */
+const NOT_VOIDED = 'work_order_id not in (select work_order_id from work_order_void)'
+
 function toWorkOrder(r: Row): WorkOrder {
   return {
     id: Number(r.work_order_id),
@@ -41,6 +44,7 @@ function toWorkOrder(r: Row): WorkOrder {
       mileageOut: str(r.vehicle_mileage_out)
     },
     taxRate: Number(r.tax_rate ?? 0),
+    dateVoided: fromDbDate(r.date_voided),
     parts: [],
     labor: [],
     payments: []
@@ -113,7 +117,7 @@ export class WorkOrderRepo {
    * Ordering follows `orderBy`.
    */
   private load(where: string, params: unknown[], orderBy = 'date_created desc, work_order_id desc', limit = 0): WorkOrder[] {
-    const sql = `select ${HEADER_COLUMNS} from work_order ${where} order by ${orderBy}` + (limit > 0 ? ` limit ${Math.floor(limit)}` : '')
+    const sql = `select ${HEADER_COLUMNS}, date_voided from work_order left join work_order_void using (work_order_id) ${where} order by ${orderBy}` + (limit > 0 ? ` limit ${Math.floor(limit)}` : '')
     const orders = (this.db.prepare(sql).all(...params) as Row[]).map(toWorkOrder)
     if (orders.length === 0) return orders
 
@@ -147,7 +151,7 @@ export class WorkOrderRepo {
   }
 
   listIncomplete(): WorkOrder[] {
-    return this.load('where date_completed is null', [])
+    return this.load(`where date_completed is null and ${NOT_VOIDED}`, [])
   }
 
   /** Prefix match on each non-blank text field, plus optional id and creation date filters. */
@@ -169,8 +173,9 @@ export class WorkOrderRepo {
       args.push(...columns.map(() => prefix))
       if (id !== null) args.push(id)
     }
-    if (f.status === 'open') clauses.push('date_completed is null')
-    if (f.status === 'completed') clauses.push('date_completed is not null')
+    if (f.status === 'open') clauses.push(`date_completed is null and ${NOT_VOIDED}`)
+    if (f.status === 'completed') clauses.push(`date_completed is not null and ${NOT_VOIDED}`)
+    if (f.status === 'voided') clauses.push('date_voided is not null')
     if (f.id && f.id > 0) {
       clauses.push('work_order_id = ?')
       args.push(f.id)
@@ -258,19 +263,27 @@ export class WorkOrderRepo {
     }
   }
 
+  /** Voids the work order (or restores it, with `voided` false). Returns it as stored. */
+  setVoided(id: number, voided: boolean, date = today()): WorkOrder | null {
+    if (voided) this.db.prepare('insert or ignore into work_order_void (work_order_id, date_voided) select work_order_id, ? from work_order where work_order_id = ?').run(toDbDate(date), id)
+    else this.db.prepare('delete from work_order_void where work_order_id = ?').run(id)
+    return this.getById(id)
+  }
+
   delete(id: number): void {
     this.db.transaction(() => {
-      for (const table of ['work_order_item', 'work_order_labor', 'work_order_payment', 'work_order']) {
+      for (const table of ['work_order_item', 'work_order_labor', 'work_order_payment', 'work_order_void', 'work_order']) {
         this.db.prepare(`delete from ${table} where work_order_id = ?`).run(id)
       }
     })()
   }
 
   stats(now = new Date()): WorkOrderStats {
-    const count = (from: Date, to: Date): number => (this.db.prepare('select count(*) as n from work_order where date_completed >= ? and date_completed < ?').get(from.getTime(), to.getTime()) as { n: number }).n
+    // Voided work orders are kept for the records but don't count anywhere here.
+    const count = (from: Date, to: Date): number => (this.db.prepare(`select count(*) as n from work_order where date_completed >= ? and date_completed < ? and ${NOT_VOIDED}`).get(from.getTime(), to.getTime()) as { n: number }).n
     const y = now.getFullYear()
     const m = now.getMonth()
-    const { n: openCount } = this.db.prepare('select count(*) as n from work_order where date_completed is null').get() as { n: number }
+    const { n: openCount } = this.db.prepare(`select count(*) as n from work_order where date_completed is null and ${NOT_VOIDED}`).get() as { n: number }
     // Sum each work order's lines in SQL rather than loading every line of every work order.
     const sums = this.db
       .prepare(
@@ -280,7 +293,7 @@ export class WorkOrderRepo {
            coalesce((select sum(item_retail_price * item_quantity) from work_order_item i where i.work_order_id = w.work_order_id and item_taxable), 0)
              + coalesce((select sum(labor_billed_hrs * labor_rate) from work_order_labor l where l.work_order_id = w.work_order_id and labor_taxable), 0) as taxable,
            coalesce((select sum(amount) from work_order_payment p where p.work_order_id = w.work_order_id), 0) as paid
-         from work_order w`
+         from work_order w where w.${NOT_VOIDED}`
       )
       .all() as { taxRate: number; untaxed: number; taxable: number; paid: number }[]
     // Each balance to the cent, as printed on its invoice, so the total matches what customers were billed.
@@ -300,7 +313,7 @@ export class WorkOrderRepo {
     const rows = this.db
       .prepare(
         `select distinct cast(strftime('%Y', date_completed / 1000, 'unixepoch', 'localtime') as integer) as year
-         from work_order where date_completed is not null order by year desc`
+         from work_order where date_completed is not null and ${NOT_VOIDED} order by year desc`
       )
       .all() as { year: number }[]
     return rows.map((r) => r.year)
@@ -313,7 +326,7 @@ export class WorkOrderRepo {
   incomeByMonth(year: number): MonthlyIncome[] {
     const from = new Date(year, 0, 1).getTime()
     const to = new Date(year + 1, 0, 1).getTime()
-    const orders = this.load('where (date_created >= ? and date_created < ?) or (date_completed >= ? and date_completed < ?)', [from, to, from, to])
+    const orders = this.load(`where ((date_created >= ? and date_created < ?) or (date_completed >= ? and date_completed < ?)) and ${NOT_VOIDED}`, [from, to, from, to])
     const months: MonthlyIncome[] = Array.from({ length: 12 }, (_, i) => ({ month: i + 1, expected: 0, actual: 0 }))
     const inYear = (d: string | null): boolean => d !== null && Number(d.slice(0, 4)) === year
     const month = (d: string): number => Number(d.slice(5, 7)) - 1

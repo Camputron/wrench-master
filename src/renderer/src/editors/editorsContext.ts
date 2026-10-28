@@ -20,6 +20,8 @@ export interface EditorsApi {
   redo: (key: string) => void
   /** Saves the draft. Resolves to the stored work order. */
   save: (key: string) => Promise<WorkOrder>
+  /** Replaces the work order in its editor, if open, with the stored one (e.g. after voiding it). */
+  reload: (workOrder: WorkOrder) => void
   /** Closes without asking; callers confirm discarding unsaved changes first. */
   close: (key: string) => void
 }

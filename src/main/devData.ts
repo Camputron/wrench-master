@@ -109,7 +109,7 @@ function addInvoiceExamples(repos: Repos, owners: { customer: Customer; vehicles
   const labor = (desc: string, billedHrs: number, code = ''): Labor => ({ id: 0, code, desc, billedHrs, rate: laborRate, taxable: true })
   const workOrder = (owner: (typeof owners)[number], vehicleIndex: number, mileageIn: number, rest: Pick<WorkOrder, 'dateCompleted' | 'parts' | 'labor'>): WorkOrder => {
     const v = owner.vehicles[vehicleIndex % owner.vehicles.length]
-    return { id: 0, dateCreated: day, customer: owner.customer, vehicle: { ...v, mileageIn: String(mileageIn), mileageOut: rest.dateCompleted ? String(mileageIn + 3) : '' }, taxRate, payments: [], ...rest }
+    return { id: 0, dateCreated: day, customer: owner.customer, vehicle: { ...v, mileageIn: String(mileageIn), mileageOut: rest.dateCompleted ? String(mileageIn + 3) : '' }, taxRate, dateVoided: null, payments: [], ...rest }
   }
   const cents = (amount: number): number => Math.round(amount * 100) / 100
   const pay = (wo: WorkOrder, amount: number): WorkOrder => repos.workOrders.save({ ...wo, payments: [{ id: 0, date: day, method: 'Credit', amount: cents(amount) }] })
@@ -217,6 +217,7 @@ export function seedDemoData(repos: Repos, taxRate: number, laborRate: number, t
         customer,
         vehicle: { ...vehicle, mileageIn: String(mileageIn), mileageOut: completedIso ? String(mileageIn + r.int(1, 12)) : '' },
         taxRate,
+        dateVoided: null,
         parts,
         labor,
         payments: []
@@ -232,6 +233,8 @@ export function seedDemoData(repos: Repos, taxRate: number, laborRate: number, t
         payments.push({ id: 0, date: iso(date), method: method(), amount: 100 })
       }
       if (payments.length) repos.workOrders.save({ ...saved, payments })
+      // A few paid jobs were voided (e.g. refunded), so the Voided filter has something to show.
+      if (completedIso && payments.length && workOrders % 60 === 59) repos.workOrders.setVoided(saved.id, true, completedIso)
       workOrders++
       if (!completedIso) open++
     }

@@ -11,6 +11,10 @@ export function useSaveWorkOrder(): (key: string, thenClose?: boolean) => Promis
     async (key, thenClose = false) => {
       const editor = editors.find((e) => e.key === key)
       if (!editor) return false
+      if (editor.draft.dateVoided) {
+        toast.info('This work order is voided. Restore it to make changes.')
+        return false
+      }
       const problem = validateWorkOrder(editor.draft)
       if (problem) {
         toast.danger(problem)

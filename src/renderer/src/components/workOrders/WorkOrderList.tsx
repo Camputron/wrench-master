@@ -1,29 +1,32 @@
-import { FileText, Magnifier, Plus, TrashBin } from '@gravity-ui/icons'
-import { Button, Chip, EmptyState, InputGroup, Label, ListBox, Select, Spinner, Table, toast } from '@heroui/react'
+import { ArrowRotateLeft, Ban, FileText, Magnifier, Plus, TrashBin } from '@gravity-ui/icons'
+import { Button, EmptyState, InputGroup, Label, ListBox, Select, Spinner, Table, toast } from '@heroui/react'
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query'
-import { memo, useDeferredValue, useState } from 'react'
+import { memo, useCallback, useDeferredValue, useEffect, useRef, useState } from 'react'
 import { balance } from '../../../../shared/billing'
 import type { DateFilter, WorkOrder, WorkOrderFilter } from '../../../../shared/types'
 import { useEditors } from '../../editors/editorsContext'
 import { keyFor } from '../../editors/editorsReducer'
+import { useSetVoided } from '../../editors/useSetVoided'
 import { useDebounced } from '../../hooks/useDebounced'
 import { usePagedLimit } from '../../hooks/usePagedLimit'
 import { customerName, formatDate, formatMoney, todayIso, vehicleName, workOrderTotal } from '../../lib/format'
 import { keys } from '../../lib/queryClient'
 import ConfirmDialog from '../ConfirmDialog'
 import { DateInput } from '../fields/Fields'
+import StatusChip from './StatusChip'
 
 /** Rows rendered at first; more load as the list is scrolled. Each row is costly to render, so keep this modest. */
 const PAGE_SIZE = 50
 const NO_WORK_ORDERS: WorkOrder[] = []
 
-type Status = 'all' | 'open' | 'completed'
+type Status = 'all' | 'open' | 'completed' | 'voided'
 type DateMode = 'any' | DateFilter['mode']
 
 const STATUSES: { id: Status; label: string }[] = [
   { id: 'all', label: 'All' },
   { id: 'open', label: 'Open' },
-  { id: 'completed', label: 'Completed' }
+  { id: 'completed', label: 'Completed' },
+  { id: 'voided', label: 'Voided' }
 ]
 const DATE_MODES: { id: DateMode; label: string }[] = [
   { id: 'any', label: 'Any date' },
@@ -70,14 +73,16 @@ interface TableProps {
   isLoadingMore: boolean
   onLoadMore: () => void
   onOpen: (id: number) => void
-  onDelete: (wo: WorkOrder) => void
+  /** Deletes the work order, or voids it if it has payments (after asking). */
+  onRemove: (wo: WorkOrder) => void
+  onRestore: (wo: WorkOrder) => void
 }
 
 /**
  * The results table. Memoized because it's the slow part: re-rendering every row on each keystroke in
  * the search field (or each change in an open editor) made the app feel sluggish.
  */
-const WorkOrderTable = memo(function WorkOrderTable({ workOrders, isPending, filtered, hasMore, isLoadingMore, onLoadMore, onOpen, onDelete }: TableProps): React.ReactElement {
+const WorkOrderTable = memo(function WorkOrderTable({ workOrders, isPending, filtered, hasMore, isLoadingMore, onLoadMore, onOpen, onRemove, onRestore }: TableProps): React.ReactElement {
   return (
     <Table className="min-h-0 flex-1">
       <Table.ScrollContainer className="h-full overflow-y-auto">
@@ -126,22 +131,24 @@ const WorkOrderTable = memo(function WorkOrderTable({ workOrders, isPending, fil
                       {wo.vehicle.licensePlate && <div className="font-mono text-xs text-muted">{wo.vehicle.licensePlate}</div>}
                     </Table.Cell>
                     <Table.Cell className="text-end tabular-nums">{workOrderTotal(wo)}</Table.Cell>
-                    <Table.Cell className={`text-end tabular-nums ${due > 0.004 ? 'text-warning' : 'text-muted'}`}>{formatMoney(Math.abs(due) < 0.005 ? 0 : due)}</Table.Cell>
+                    {wo.dateVoided ? <Table.Cell className="text-end text-muted">—</Table.Cell> : <Table.Cell className={`text-end tabular-nums ${due > 0.004 ? 'text-warning' : 'text-muted'}`}>{formatMoney(Math.abs(due) < 0.005 ? 0 : due)}</Table.Cell>}
                     <Table.Cell>
-                      {wo.dateCompleted ? (
-                        <Chip size="sm" variant="soft" color="success">
-                          Completed {formatDate(wo.dateCompleted)}
-                        </Chip>
-                      ) : (
-                        <Chip size="sm" variant="soft" color="warning">
-                          Open
-                        </Chip>
-                      )}
+                      <StatusChip workOrder={wo} />
                     </Table.Cell>
                     <Table.Cell>
-                      <Button size="sm" variant="ghost" isIconOnly aria-label={`Delete work order #${wo.id}`} onPress={() => onDelete(wo)}>
-                        <TrashBin className="size-4 text-danger" />
-                      </Button>
+                      {wo.dateVoided ? (
+                        <Button size="sm" variant="ghost" isIconOnly aria-label={`Restore work order #${wo.id}`} onPress={() => onRestore(wo)}>
+                          <ArrowRotateLeft className="size-4" />
+                        </Button>
+                      ) : wo.payments.length > 0 ? (
+                        <Button size="sm" variant="ghost" isIconOnly aria-label={`Void work order #${wo.id}`} onPress={() => onRemove(wo)}>
+                          <Ban className="size-4 text-danger" />
+                        </Button>
+                      ) : (
+                        <Button size="sm" variant="ghost" isIconOnly aria-label={`Delete work order #${wo.id}`} onPress={() => onRemove(wo)}>
+                          <TrashBin className="size-4 text-danger" />
+                        </Button>
+                      )}
                     </Table.Cell>
                   </Table.Row>
                 )
@@ -170,7 +177,14 @@ export default function WorkOrderList(): React.ReactElement {
   const [dateMode, setDateMode] = useState<DateMode>('any')
   const [from, setFrom] = useState<string | null>(todayIso)
   const [to, setTo] = useState<string | null>(todayIso)
-  const [toDelete, setToDelete] = useState<WorkOrder | null>(null)
+  const [toRemove, setToRemove] = useState<WorkOrder | null>(null)
+  const setVoided = useSetVoided()
+  // Stable for the memoized table, while always calling the latest setVoided.
+  const setVoidedRef = useRef(setVoided)
+  useEffect(() => {
+    setVoidedRef.current = setVoided
+  })
+  const restore = useCallback((wo: WorkOrder) => void setVoidedRef.current(wo, false), [])
   const text = useDebounced(search.trim(), 200)
 
   const criteria: Omit<WorkOrderFilter, 'limit'> = { text, status: status === 'all' ? undefined : status, date: buildDateFilter(dateMode, from, to) }
@@ -210,16 +224,24 @@ export default function WorkOrderList(): React.ReactElement {
         </Button>
       </div>
 
-      <WorkOrderTable workOrders={results} isPending={workOrders.isPending} filtered={filtered} hasMore={hasMore} isLoadingMore={workOrders.isFetching} onLoadMore={loadMore} onOpen={openWorkOrder} onDelete={setToDelete} />
+      <WorkOrderTable workOrders={results} isPending={workOrders.isPending} filtered={filtered} hasMore={hasMore} isLoadingMore={workOrders.isFetching} onLoadMore={loadMore} onOpen={openWorkOrder} onRemove={setToRemove} onRestore={restore} />
 
-      {toDelete && (
-        <ConfirmDialog isOpen onOpenChange={(open) => !open && setToDelete(null)} title={`Delete work order #${toDelete.id}?`} confirmLabel="Delete work order" onConfirm={() => deleteWorkOrder(toDelete)}>
-          <p>
-            {customerName(toDelete.customer)} · {vehicleName(toDelete.vehicle)} · {workOrderTotal(toDelete)}
-          </p>
-          <p>Its parts, labor, and payments are deleted too. This can’t be undone.</p>
-        </ConfirmDialog>
-      )}
+      {toRemove &&
+        (toRemove.payments.length > 0 ? (
+          <ConfirmDialog isOpen onOpenChange={(open) => !open && setToRemove(null)} title={`Void work order #${toRemove.id}?`} confirmLabel="Void work order" onConfirm={() => setVoided(toRemove, true)}>
+            <p>
+              {customerName(toRemove.customer)} · {vehicleName(toRemove.vehicle)} · {workOrderTotal(toRemove)}
+            </p>
+            <p>It has payments, so it’s voided rather than deleted. It stays in your records and Excel exports, marked void, but it’s left out of totals and the dashboard. You can restore it later.</p>
+          </ConfirmDialog>
+        ) : (
+          <ConfirmDialog isOpen onOpenChange={(open) => !open && setToRemove(null)} title={`Delete work order #${toRemove.id}?`} confirmLabel="Delete work order" onConfirm={() => deleteWorkOrder(toRemove)}>
+            <p>
+              {customerName(toRemove.customer)} · {vehicleName(toRemove.vehicle)} · {workOrderTotal(toRemove)}
+            </p>
+            <p>Its parts and labor are deleted too. This can’t be undone.</p>
+          </ConfirmDialog>
+        ))}
     </div>
   )
 }

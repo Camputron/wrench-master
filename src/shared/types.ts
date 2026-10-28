@@ -87,6 +87,8 @@ export interface WorkOrder {
   vehicle: WorkOrderVehicle
   /** Fraction, e.g. 0.08625 for 8.625% */
   taxRate: number
+  /** Set when voided: kept for the records, but left out of totals and the dashboard. */
+  dateVoided: IsoDate | null
   parts: AutoPart[]
   labor: Labor[]
   payments: Payment[]
@@ -107,7 +109,7 @@ export interface WorkOrderFilter {
    * company, the vehicle's year, make, or model, or the start of the plate or VIN.
    */
   text?: string
-  status?: 'open' | 'completed'
+  status?: 'open' | 'completed' | 'voided'
   id?: number
   firstName?: string
   lastName?: string
@@ -183,6 +185,8 @@ export interface Settings {
   zoom: number
   /** Ask before closing the window */
   confirmExit: boolean
+  /** Where backups are saved; empty for the Backups folder next to the database. */
+  backupFolder: string
 }
 
 export type SettingsPatch = Partial<Omit<Settings, 'shop'>> & { shop?: Partial<ShopInfo> }
@@ -196,11 +200,24 @@ export type MenuAction =
   | { type: 'newWorkOrder' }
   | { type: 'save' }
   | { type: 'print' }
+  /** File > Close Work Order: closes the work order on screen; on macOS, closes the window when there isn't one. */
+  | { type: 'closeWorkOrder' }
+  /** Edit > Find: jumps to the search field of the customer or work order list. */
+  | { type: 'find' }
   /** Edit > Undo/Redo: the renderer undoes typing in a text field, or the last work order change otherwise. */
   | { type: 'undo' }
   | { type: 'redo' }
   | { type: 'preferences' }
   | { type: 'about' }
+
+export interface BackupStatus {
+  /** Where backups are saved. */
+  folder: string
+  /** True when it's the default folder next to the database (none chosen in Preferences). */
+  isDefault: boolean
+  /** The newest backup there, if any. */
+  last: { path: string; date: string } | null
+}
 
 export interface AppInfo {
   name: string

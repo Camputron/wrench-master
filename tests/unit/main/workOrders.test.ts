@@ -17,6 +17,7 @@ const draft = (overrides: Partial<WorkOrder> = {}): WorkOrder => ({
   id: 0,
   dateCreated: '2025-06-01',
   dateCompleted: null,
+  dateVoided: null,
   customer: r.customers.getById(1)!,
   vehicle: { vin: 'V', year: '2003', make: 'Honda', model: 'Accord', licensePlate: '', color: '', engine: '', transmission: '', mileageIn: '1', mileageOut: '' },
   taxRate: 0.1,
@@ -43,7 +44,7 @@ describe('reading work orders written by the Java app', () => {
       ['2024-03-20', 'Credit', 50]
     ])
     expect(bill(wo)).toBeCloseTo(WO1_TOTAL, 10)
-    expect(balance(wo)).toBeCloseTo(WO1_TOTAL - 150, 10)
+    expect(balance(wo)).toBe(104.41) // $254.40625 - $150, to the cent
   })
 
   it('returns null for a missing work order', () => {
@@ -190,5 +191,46 @@ describe('opening an existing database', () => {
     r = createRepos(file)
     expect(r.workOrders.list()).toHaveLength(3)
     expect(r.db.prepare(`select count(*) as n from sqlite_master where type = 'index' and name like 'idx_%'`).get()).toEqual({ n: 5 })
+  })
+})
+
+describe('voiding', () => {
+  it('keeps the work order and its payments, but leaves it out of reporting', () => {
+    const march = new Date(2024, 2, 15)
+    const before = r.workOrders.stats(march)
+    const voided = r.workOrders.setVoided(1, true, '2024-04-01')!
+    expect(voided.dateVoided).toBe('2024-04-01')
+    expect(voided.payments).toHaveLength(2)
+    expect(ids(r.workOrders.list())).toEqual([3, 2, 1])
+    expect(r.workOrders.stats(march)).toMatchObject({ completedThisMonth: 0, completedThisYear: 0, openCount: 2, unpaidCount: 1, unpaidTotal: 90 })
+    expect(r.workOrders.years()).toEqual([])
+    expect(r.workOrders.incomeByMonth(2024)[2]).toEqual({ month: 3, expected: 0, actual: 0 })
+
+    // Saving it (as its editor does) leaves it voided; restoring brings everything back.
+    r.workOrders.save(voided)
+    expect(r.workOrders.getById(1)!.dateVoided).toBe('2024-04-01')
+    expect(r.workOrders.setVoided(1, false)!.dateVoided).toBeNull()
+    expect(r.workOrders.stats(march)).toEqual(before)
+  })
+
+  it('has its own status filter, and leaves the open list', () => {
+    r.workOrders.setVoided(2, true)
+    expect(ids(r.workOrders.filter({ status: 'voided' }))).toEqual([2])
+    expect(ids(r.workOrders.filter({ status: 'open' }))).toEqual([3])
+    expect(ids(r.workOrders.filter({ status: 'completed' }))).toEqual([1])
+    expect(ids(r.workOrders.listIncomplete())).toEqual([3])
+    // Voiding twice keeps the first date; unknown ids do nothing.
+    const date = r.workOrders.getById(2)!.dateVoided
+    expect(r.workOrders.setVoided(2, true, '2030-01-01')!.dateVoided).toBe(date)
+    expect(r.workOrders.setVoided(99, true)).toBeNull()
+    expect(r.db.prepare('select count(*) as n from work_order_void').get()).toEqual({ n: 1 })
+  })
+
+  it('is recorded outside the Java app’s tables, and deleted with the work order', () => {
+    const columns = (r.db.prepare('pragma table_info(work_order)').all() as { name: string }[]).map((c) => c.name)
+    expect(columns).not.toContain('date_voided')
+    r.workOrders.setVoided(3, true)
+    r.workOrders.delete(3)
+    expect(r.db.prepare('select count(*) as n from work_order_void').get()).toEqual({ n: 0 })
   })
 })

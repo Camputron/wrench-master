@@ -69,6 +69,12 @@ export function inspectLegacyDatabase(file: string): { customers: number; workOr
 
 const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? '' : 's'}`
 
+/** A warning for the confirmation dialog when replacing the data would close unsaved work orders. */
+export function unsavedWarning(services: Services): string {
+  const n = services.unsavedChanges
+  return n > 0 ? `\n\n${n === 1 ? 'A work order with unsaved changes' : `${n} work orders with unsaved changes`} will be closed, and those changes lost.` : ''
+}
+
 /** File > Import: replaces the app's data with a database (and preferences) from the Java app. */
 export async function importFromJavaApp(win: BrowserWindow, services: Services): Promise<void> {
   const picked = await dialog.showOpenDialog(win, {
@@ -96,7 +102,10 @@ export async function importFromJavaApp(win: BrowserWindow, services: Services):
   const confirm = await dialog.showMessageBox(win, {
     type: 'warning',
     message: 'Replace all current data?',
-    detail: `${basename(source)} has ${plural(counts.customers, 'customer')} and ${plural(counts.workOrders, 'work order')}. ` + 'Importing replaces every customer, vehicle, and work order in this app. A backup of the current data is saved first.',
+    detail:
+      `${basename(source)} has ${plural(counts.customers, 'customer')} and ${plural(counts.workOrders, 'work order')}. ` +
+      'Importing replaces every customer, vehicle, and work order in this app. A backup of the current data is saved first.' +
+      unsavedWarning(services),
     buttons: ['Import', 'Cancel'],
     defaultId: 0,
     cancelId: 1,

@@ -9,6 +9,7 @@ import { importFromJavaApp } from './legacyImport'
 import { runDevDbCommand, type DevDbAction } from './devData'
 import { exportToExcel, EXPORT_FILE_NAMES, type ExportKind } from './excelExport'
 import { buildMenu } from './menu'
+import { restoreFromBackup } from './restoreBackup'
 import { emit, Services } from './services'
 import { SettingsStore } from './settings'
 
@@ -48,6 +49,16 @@ async function exportData(kind: ExportKind): Promise<void> {
     emit('notice', { kind: 'success', message: `Exported ${count} ${what}${count === 1 ? '' : 's'}`, path: filePath })
   } catch (error) {
     emit('notice', { kind: 'error', message: `Export failed: ${error instanceof Error ? error.message : String(error)}` })
+  }
+}
+
+/** File > Back Up Now. */
+async function backUpNow(): Promise<void> {
+  try {
+    const path = await services.backUp('manual')
+    emit('notice', { kind: 'success', message: 'Backed up your data', path })
+  } catch (error) {
+    emit('notice', { kind: 'error', message: `Backup failed: ${error instanceof Error ? error.message : String(error)}` })
   }
 }
 
@@ -149,9 +160,15 @@ app.whenReady().then(() => {
         const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
         if (win) void importFromJavaApp(win, services)
       },
-      exportData: (kind) => void exportData(kind)
+      exportData: (kind) => void exportData(kind),
+      backUpNow: () => void backUpNow(),
+      restoreBackup: () => {
+        const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
+        if (win) void restoreFromBackup(win, services)
+      }
     })
   )
+  services.startAutoBackups((error) => emit('notice', { kind: 'error', message: `Automatic backup failed: ${error instanceof Error ? error.message : String(error)}. Check the backup folder in Preferences.` }))
 
   createWindow()
 

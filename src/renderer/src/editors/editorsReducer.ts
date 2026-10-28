@@ -30,6 +30,8 @@ export type EditorsAction =
   | { type: 'undo'; key: string }
   | { type: 'redo'; key: string }
   | { type: 'saved'; key: string; workOrder: WorkOrder }
+  /** Replaces an open work order with the stored one (e.g. after voiding it), clearing its undo history. */
+  | { type: 'reload'; workOrder: WorkOrder }
 
 const MAX_HISTORY = 100
 
@@ -41,6 +43,11 @@ export const initialEditorsState: EditorsState = { editors: [], active: null, ne
 
 function updateEditor(state: EditorsState, key: string, update: (e: Editor) => Editor): EditorsState {
   return { ...state, editors: state.editors.map((e) => (e.key === key ? update(e) : e)) }
+}
+
+/** Like updateEditor, but leaves voided work orders alone: they're read-only until restored. */
+function changeDraft(state: EditorsState, key: string, update: (e: Editor) => Editor): EditorsState {
+  return updateEditor(state, key, (e) => (e.draft.dateVoided ? e : update(e)))
 }
 
 export function editorsReducer(state: EditorsState, action: EditorsAction): EditorsState {
@@ -67,20 +74,22 @@ export function editorsReducer(state: EditorsState, action: EditorsAction): Edit
     case 'activate':
       return { ...state, active: action.key }
     case 'edit':
-      return updateEditor(state, action.key, (e) => {
+      return changeDraft(state, action.key, (e) => {
         const draft = action.update(e.draft)
         if (draft === e.draft) return e
         return action.record ? { ...e, draft, past: [...e.past, e.draft].slice(-MAX_HISTORY), future: [] } : { ...e, draft }
       })
     case 'undo':
-      return updateEditor(state, action.key, (e) => (e.past.length ? { ...e, draft: e.past[e.past.length - 1], past: e.past.slice(0, -1), future: [e.draft, ...e.future] } : e))
+      return changeDraft(state, action.key, (e) => (e.past.length ? { ...e, draft: e.past[e.past.length - 1], past: e.past.slice(0, -1), future: [e.draft, ...e.future] } : e))
     case 'redo':
-      return updateEditor(state, action.key, (e) => (e.future.length ? { ...e, draft: e.future[0], past: [...e.past, e.draft], future: e.future.slice(1) } : e))
+      return changeDraft(state, action.key, (e) => (e.future.length ? { ...e, draft: e.future[0], past: [...e.past, e.draft], future: e.future.slice(1) } : e))
     case 'saved': {
       const key = keyFor(action.workOrder.id)
       // A new work order gets its real key once saved. If it's somehow already open under that key, keep one.
       const editors = state.editors.filter((e) => e.key === action.key || e.key !== key).map((e) => (e.key === action.key ? { ...e, key, baseline: action.workOrder, draft: action.workOrder } : e))
       return { ...state, editors, active: state.active === action.key ? key : state.active }
     }
+    case 'reload':
+      return updateEditor(state, keyFor(action.workOrder.id), (e) => ({ ...e, baseline: action.workOrder, draft: action.workOrder, past: [], future: [] }))
   }
 }

@@ -109,6 +109,7 @@ export default function WorkOrderEditorsProvider({ defaultTaxRate, onShow, child
       undo: (key) => dispatch({ type: 'undo', key }),
       redo: (key) => dispatch({ type: 'redo', key }),
       save,
+      reload: (workOrder) => dispatch({ type: 'reload', workOrder }),
       close: (key) => dispatch({ type: 'close', key })
     }),
     [state, openWorkOrder, save, defaultTaxRate, onShow]

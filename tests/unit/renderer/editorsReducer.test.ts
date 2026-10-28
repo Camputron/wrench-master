@@ -87,3 +87,21 @@ describe('unsaved changes and saving', () => {
     expect(s.editors[0].draft.parts[0].id).toBe(40)
   })
 })
+
+describe('voided work orders', () => {
+  it('can’t be changed, even by undo; reloading replaces the draft and history', () => {
+    let s = run({ type: 'open', workOrder: wo(4), activate: true }, { type: 'edit', key: 'wo-4', update: (d) => ({ ...d, parts: [emptyPart()] }), record: true }, { type: 'saved', key: 'wo-4', workOrder: { ...wo(4), parts: [emptyPart()] } })
+    const voided = { ...s.editors[0].draft, dateVoided: '2026-02-01' }
+    s = editorsReducer(s, { type: 'reload', workOrder: voided })
+    expect(s.editors[0]).toMatchObject({ draft: voided, baseline: voided, past: [], future: [] })
+    for (const action of [
+      { type: 'edit', key: 'wo-4', update: (d: WorkOrder) => ({ ...d, labor: [emptyLabor(90)] }), record: true },
+      { type: 'undo', key: 'wo-4' }
+    ] as EditorsAction[]) {
+      expect(editorsReducer(s, action)).toEqual(s)
+    }
+    expect(isDirty(s.editors[0])).toBe(false)
+    // Reloading a work order that isn't open does nothing.
+    expect(editorsReducer(s, { type: 'reload', workOrder: wo(77) })).toEqual(s)
+  })
+})

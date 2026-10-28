@@ -55,6 +55,11 @@ describe('invoice HTML', () => {
     expect(html.indexOf('class="bottom"')).toBeGreaterThan(html.indexOf('class="lines"'))
   })
 
+  it('marks voided work orders VOID, with the date', () => {
+    expect(invoiceHtml(wo, shop)).not.toContain('VOID')
+    expect(invoiceHtml({ ...wo, dateVoided: '2026-02-03' }, shop)).toContain('<p class="void">VOID 02/03/2026</p>')
+  })
+
   it('pads the on-screen preview like the paper, but only on screen', () => {
     const html = invoiceHtml(wo, shop)
     expect(html).toContain('@media screen { body { padding: 0.4in 0.45in; } }')

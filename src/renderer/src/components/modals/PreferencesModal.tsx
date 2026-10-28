@@ -2,7 +2,8 @@ import { Gear } from '@gravity-ui/icons'
 import { Button, Description, Input, Label, ListBox, Modal, NumberField, Select, Switch, TextField } from '@heroui/react'
 import { useState } from 'react'
 import { US_STATES } from '../../../../shared/states'
-import { ZOOM_LEVELS, type Settings, type ShopInfo, type Theme } from '../../../../shared/types'
+import { ZOOM_LEVELS, type Settings, type SettingsPatch, type ShopInfo, type Theme } from '../../../../shared/types'
+import BackupSection from './BackupSection'
 
 interface Props {
   isOpen: boolean
@@ -56,7 +57,10 @@ const PreferencesModal = ({ isOpen, onOpenChange, settings }: Props): React.Reac
     setSaving(true)
     setError(null)
     try {
-      await window.api.settings.update(draft)
+      // The backup folder is changed from its own section, right away; don't put back the one the form started with.
+      const patch: SettingsPatch = { ...draft }
+      delete patch.backupFolder
+      await window.api.settings.update(patch)
       onOpenChange(false)
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
@@ -130,6 +134,8 @@ const PreferencesModal = ({ isOpen, onOpenChange, settings }: Props): React.Reac
                 </Switch.Content>
               </Switch>
             </section>
+
+            <BackupSection />
 
             {error && <p className="text-sm text-danger">Couldn’t save preferences: {error}</p>}
           </Modal.Body>

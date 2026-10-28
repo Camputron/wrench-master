@@ -28,8 +28,17 @@ interface Props<T> {
 /** A card with a table of work order lines (parts, labor, or payments) and add/edit/delete actions. */
 export default function LineTable<T>({ title, noun, items, columns, describe, onAdd, onEdit, onDelete, emptyText, footer }: Props<T>): React.ReactElement {
   const rows = items.map((item, index) => ({ index, item }))
+  // Delete or Backspace on a focused row removes it, like its Remove button (and it can be undone the same way).
+  const onKeyDown = (e: React.KeyboardEvent): void => {
+    if (e.key !== 'Delete' && e.key !== 'Backspace') return
+    const target = e.target as HTMLElement
+    const row = target.closest<HTMLElement>('tbody [role="row"][data-key]')
+    if (!row || (target !== row && target.getAttribute('role') !== 'gridcell')) return
+    e.preventDefault()
+    onDelete(Number(row.dataset.key))
+  }
   return (
-    <section className="flex flex-col gap-3 rounded-2xl bg-surface p-4">
+    <section className="flex flex-col gap-3 rounded-2xl bg-surface p-4" onKeyDown={onKeyDown}>
       <div className="flex items-center justify-between">
         <h3 className="font-semibold">{title}</h3>
         <Button size="sm" variant="secondary" onPress={onAdd}>

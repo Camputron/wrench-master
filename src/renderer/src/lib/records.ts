@@ -15,6 +15,7 @@ export function emptyWorkOrder(taxRate: number, today: string): WorkOrder {
     customer: EMPTY_CUSTOMER,
     vehicle: { vin: '', year: '', make: '', model: '', licensePlate: '', color: '', engine: '', transmission: '', mileageIn: '', mileageOut: '' },
     taxRate,
+    dateVoided: null,
     parts: [],
     labor: [],
     payments: []

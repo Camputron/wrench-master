@@ -9,7 +9,7 @@ import { existsSync, readFileSync } from 'fs'
 import { tempDir } from '../helpers/tempDir'
 
 describe('application menu', () => {
-  const handlers = { send: vi.fn(), zoom: vi.fn(), importFromJavaApp: vi.fn(), exportData: vi.fn() }
+  const handlers = { send: vi.fn(), zoom: vi.fn(), importFromJavaApp: vi.fn(), exportData: vi.fn(), backUpNow: vi.fn(), restoreBackup: vi.fn() }
   const menu = buildMenu(handlers) as unknown as { items: MenuItemConstructorOptions[] }
   const find = (label: string): MenuItemConstructorOptions => {
     const queue = [...menu.items]
@@ -27,6 +27,8 @@ describe('application menu', () => {
     ['New Customer…', { type: 'newCustomer' }, undefined],
     ['Save Work Order', { type: 'save' }, 'CmdOrCtrl+S'],
     ['Print Work Order…', { type: 'print' }, 'CmdOrCtrl+P'],
+    ['Close Work Order', { type: 'closeWorkOrder' }, 'CmdOrCtrl+W'],
+    ['Find', { type: 'find' }, 'CmdOrCtrl+F'],
     ['Undo', { type: 'undo' }, 'CmdOrCtrl+Z'],
     ['Dashboard', { type: 'navigate', page: 'dashboard' }, 'CmdOrCtrl+1'],
     ['Customers', { type: 'navigate', page: 'customers' }, 'CmdOrCtrl+2'],
@@ -37,7 +39,7 @@ describe('application menu', () => {
     expect(find(label).accelerator).toBe(accelerator)
   })
 
-  it('wires zoom, import, and every export', () => {
+  it('wires zoom, import, every export, and backups', () => {
     click('Zoom In')
     click('Zoom Out')
     click('Actual Size')
@@ -46,6 +48,10 @@ describe('application menu', () => {
     expect(handlers.importFromJavaApp).toHaveBeenCalled()
     for (const label of ['Customers…', 'Vehicles…', 'Work Orders…', 'Parts Catalog…']) click(label)
     expect(handlers.exportData.mock.calls.flat()).toEqual(['customers', 'vehicles', 'workOrders', 'parts'])
+    click('Back Up Now')
+    expect(handlers.backUpNow).toHaveBeenCalled()
+    click('Restore from Backup…')
+    expect(handlers.restoreBackup).toHaveBeenCalled()
   })
 })
 
@@ -86,7 +92,9 @@ describe('demo data', () => {
   it('agrees with line-by-line billing on every seeded work order', () => {
     const r = createRepos(join(tempDir(), 'autoshop.db'))
     seedDemoData(r, 0.08625, 90, new Date(2026, 9, 27))
-    const all = r.workOrders.list()
+    // Voided work orders are left out of the dashboard's numbers.
+    const all = r.workOrders.list().filter((w) => !w.dateVoided)
+    expect(r.workOrders.list().length - all.length).toBeGreaterThan(0)
     const owed = all.map((w) => Math.round((bill(w) - w.payments.reduce((s, p) => s + p.amount, 0)) * 100) / 100).filter((x) => x > 0)
     const stats = r.workOrders.stats(new Date(2026, 9, 27))
     expect(stats.unpaidCount).toBe(owed.length)

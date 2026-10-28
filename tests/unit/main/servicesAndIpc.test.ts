@@ -22,6 +22,7 @@ const blank = (): WorkOrder => ({
   id: 0,
   dateCreated: '2026-10-01',
   dateCompleted: null,
+  dateVoided: null,
   customer: { id: 0, firstName: 'A', lastName: 'B', phone: '', email: '', company: '', street: '', city: '', state: 'UNKNOWN', zip: '' },
   vehicle: { vin: '', year: '', make: '', model: '', licensePlate: '', color: '', engine: '', transmission: '', mileageIn: '', mileageOut: '' },
   taxRate: 0.1,
@@ -55,6 +56,19 @@ describe('IPC handlers', () => {
 
   it('report app info', async () => {
     expect(await createHandlers(services).app.info()).toMatchObject({ name: 'Wrench Master', version: '2.0.0', databasePath: join(dir, 'autoshop.db') })
+  })
+})
+
+describe('work orders with payments', () => {
+  it('can’t be deleted, only voided and restored', async () => {
+    const h = createHandlers(services)
+    expect(() => h.workOrders.delete(1)).toThrow(/Void it instead/)
+    expect(services.repos.workOrders.getById(1)).not.toBeNull()
+    expect((await h.workOrders.setVoided(1, true))?.dateVoided).not.toBeNull()
+    expect((await h.workOrders.setVoided(1, false))?.dateVoided).toBeNull()
+    // Without payments, deleting works as before.
+    await h.workOrders.delete(2)
+    expect(services.repos.workOrders.getById(2)).toBeNull()
   })
 })
 

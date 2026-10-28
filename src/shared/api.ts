@@ -15,7 +15,8 @@ import type {
   WorkOrder,
   VinDecodeResult,
   WorkOrderFilter,
-  WorkOrderStats
+  WorkOrderStats,
+  BackupStatus
 } from './types'
 
 /**
@@ -61,7 +62,10 @@ export interface Api {
     filter(filter: WorkOrderFilter): Promise<WorkOrder[]>
     /** Inserts or updates, including line items. Resolves to the stored work order (with its id). */
     save(workOrder: WorkOrder): Promise<WorkOrder>
+    /** Refuses work orders with payments: those are voided instead, so the shop's records stay complete. */
     delete(id: number): Promise<void>
+    /** Voids a work order (kept, but left out of totals), or restores it. Resolves to it as stored. */
+    setVoided(id: number, voided: boolean): Promise<WorkOrder | null>
     stats(): Promise<WorkOrderStats>
     years(): Promise<number[]>
     incomeByMonth(year: number): Promise<MonthlyIncome[]>
@@ -85,6 +89,18 @@ export interface Api {
     print(workOrder: WorkOrder): Promise<boolean>
     /** Asks where to save, then writes a PDF. Resolves to its path, or null if cancelled. */
     savePdf(workOrder: WorkOrder): Promise<string | null>
+  }
+  backups: {
+    /** Where backups go, and the newest one. */
+    status(): Promise<BackupStatus>
+    /** Backs up the data now. Resolves to the backup's path. */
+    backUpNow(): Promise<string>
+    /** Asks for a folder to save backups in. Resolves to it, or null if cancelled. */
+    chooseFolder(): Promise<string | null>
+    /** Opens the backup folder in Finder / Explorer. */
+    showFolder(): Promise<void>
+    /** Asks for a backup and restores it (with confirmation). Same as File > Restore from Backup. */
+    restore(): Promise<void>
   }
   app: {
     info(): Promise<AppInfo>
@@ -128,6 +144,7 @@ export const API_METHODS: { [N in keyof Api]: Record<keyof Api[N], true> } = {
     filter: true,
     save: true,
     delete: true,
+    setVoided: true,
     stats: true,
     years: true,
     incomeByMonth: true
@@ -135,6 +152,7 @@ export const API_METHODS: { [N in keyof Api]: Record<keyof Api[N], true> } = {
   settings: { get: true, update: true },
   session: { recentWorkOrders: true, openWorkOrderIds: true, setOpenWorkOrderIds: true },
   invoices: { html: true, print: true, savePdf: true },
+  backups: { status: true, backUpNow: true, chooseFolder: true, showFolder: true, restore: true },
   app: { info: true, showItemInFolder: true, setUnsavedChanges: true }
 }
 

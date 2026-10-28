@@ -1,10 +1,11 @@
 import { Envelope, FilePlus, Handset, MapPin, Pencil, Plus, TrashBin } from '@gravity-ui/icons'
-import { Button, Chip, EmptyState, Spinner, Table } from '@heroui/react'
+import { Button, EmptyState, Spinner, Table } from '@heroui/react'
 import { useQuery } from '@tanstack/react-query'
 import type { Customer, Vehicle } from '../../../../shared/types'
 import { useEditors } from '../../editors/editorsContext'
 import { customerName, formatAddress, formatDate, vehicleName, workOrderTotal } from '../../lib/format'
 import { keys } from '../../lib/queryClient'
+import StatusChip from '../workOrders/StatusChip'
 
 interface Props {
   customer: Customer
@@ -147,15 +148,7 @@ export default function CustomerDetail({ customer, onEdit, onDelete, onAddVehicl
                     <Table.Cell>{vehicleName(wo.vehicle)}</Table.Cell>
                     <Table.Cell className="text-end tabular-nums">{workOrderTotal(wo)}</Table.Cell>
                     <Table.Cell>
-                      {wo.dateCompleted ? (
-                        <Chip size="sm" variant="soft" color="success" aria-label={`Completed ${formatDate(wo.dateCompleted)}`}>
-                          Done
-                        </Chip>
-                      ) : (
-                        <Chip size="sm" variant="soft" color="warning">
-                          Open
-                        </Chip>
-                      )}
+                      <StatusChip workOrder={wo} compact />
                     </Table.Cell>
                   </Table.Row>
                 )}

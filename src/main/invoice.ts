@@ -48,6 +48,7 @@ const STYLE = `
   .shop .title { font-weight: 600; color: #111; }
   .meta { text-align: right; white-space: nowrap; }
   .meta .number { font-size: 12pt; font-weight: 700; color: #111; }
+  .meta .void { font-size: 12pt; font-weight: 800; letter-spacing: 0.08em; color: #b00020; }
   .boxes { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 8px 0; }
   .box { border: 1px solid #bbb; border-radius: 3px; padding: 5px 8px; }
   h2 { font-size: 8pt; text-transform: uppercase; letter-spacing: 0.05em; color: #444; margin: 0 0 3px; }
@@ -128,6 +129,7 @@ export function invoiceHtml(wo: WorkOrder, settings: Settings): string {
       <p class="number">Work order ${escapeHtml(invoiceNumber(wo))}</p>
       <p>Date ${date(wo.dateCreated)}</p>
       ${wo.dateCompleted ? `<p>Completed ${date(wo.dateCompleted)}</p>` : ''}
+      ${wo.dateVoided ? `<p class="void">VOID ${date(wo.dateVoided)}</p>` : ''}
     </div>
   </header>
 
