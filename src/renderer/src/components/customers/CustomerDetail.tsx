@@ -1,10 +1,13 @@
-import { Envelope, FilePlus, Handset, MapPin, Pencil, Plus, TrashBin } from '@gravity-ui/icons'
+import { Calculator, Envelope, FilePlus, Handset, MapPin, Pencil, Plus, TrashBin } from '@gravity-ui/icons'
 import { Button, EmptyState, Spinner, Table } from '@heroui/react'
 import { useQuery } from '@tanstack/react-query'
 import type { Customer, Vehicle } from '../../../../shared/types'
-import { useEditors } from '../../editors/editorsContext'
-import { customerName, formatAddress, formatDate, vehicleName, workOrderTotal } from '../../lib/format'
+import { bill } from '../../../../shared/billing'
+import { estimateNumber } from '../../../../shared/estimates'
+import { useEditors, useEstimateEditors } from '../../editors/editorsContext'
+import { customerName, formatAddress, formatDate, formatMoney, vehicleName, workOrderTotal } from '../../lib/format'
 import { keys } from '../../lib/queryClient'
+import EstimateStatusChip from '../estimates/EstimateStatusChip'
 import StatusChip from '../workOrders/StatusChip'
 
 interface Props {
@@ -28,11 +31,13 @@ function Section({ title, action, children }: { title: string; action?: React.Re
   )
 }
 
-/** The selected customer's contact details, vehicles, and work orders. */
+/** The selected customer's contact details, vehicles, work orders, and estimates. */
 export default function CustomerDetail({ customer, onEdit, onDelete, onAddVehicle, onEditVehicle, onDeleteVehicle }: Props): React.ReactElement {
   const { newWorkOrder, openWorkOrder } = useEditors()
+  const { newEstimate, openEstimate } = useEstimateEditors()
   const vehicles = useQuery({ queryKey: keys.vehiclesOf(customer.id), queryFn: () => window.api.vehicles.listByCustomer(customer.id) })
   const workOrders = useQuery({ queryKey: keys.workOrdersOf(customer.id), queryFn: () => window.api.workOrders.listByCustomer(customer.id) })
+  const estimates = useQuery({ queryKey: keys.estimatesOf(customer.id), queryFn: () => window.api.estimates.listByCustomer(customer.id) })
   const name = [customer.firstName, customer.lastName].filter(Boolean).join(' ')
   const address = formatAddress(customer)
 
@@ -67,6 +72,10 @@ export default function CustomerDetail({ customer, onEdit, onDelete, onAddVehicl
           <Button size="sm" onPress={() => newWorkOrder({ customer })}>
             <FilePlus className="size-4" />
             New work order
+          </Button>
+          <Button size="sm" variant="secondary" onPress={() => newEstimate({ customer })}>
+            <Calculator className="size-4" />
+            New estimate
           </Button>
           <Button size="sm" variant="secondary" onPress={onEdit}>
             <Pencil className="size-4" />
@@ -113,6 +122,9 @@ export default function CustomerDetail({ customer, onEdit, onDelete, onAddVehicl
                         <Button size="sm" variant="ghost" isIconOnly aria-label={`New work order for ${vehicleName(v)}`} onPress={() => newWorkOrder({ customer, vehicle: v })}>
                           <FilePlus className="size-4" />
                         </Button>
+                        <Button size="sm" variant="ghost" isIconOnly aria-label={`New estimate for ${vehicleName(v)}`} onPress={() => newEstimate({ customer, vehicle: v })}>
+                          <Calculator className="size-4" />
+                        </Button>
                         <Button size="sm" variant="ghost" isIconOnly aria-label={`Edit ${vehicleName(v)}`} onPress={() => onEditVehicle(v)}>
                           <Pencil className="size-4" />
                         </Button>
@@ -149,6 +161,35 @@ export default function CustomerDetail({ customer, onEdit, onDelete, onAddVehicl
                     <Table.Cell className="text-end tabular-nums">{workOrderTotal(wo)}</Table.Cell>
                     <Table.Cell>
                       <StatusChip workOrder={wo} compact />
+                    </Table.Cell>
+                  </Table.Row>
+                )}
+              </Table.Body>
+            </Table.Content>
+          </Table.ScrollContainer>
+        </Table>
+      </Section>
+
+      <Section title="Estimates">
+        <Table variant="secondary">
+          <Table.ScrollContainer>
+            <Table.Content aria-label="Estimates" onRowAction={(key) => void openEstimate(Number(key))}>
+              <Table.Header>
+                <Table.Column isRowHeader>#</Table.Column>
+                <Table.Column>Date</Table.Column>
+                <Table.Column>Vehicle</Table.Column>
+                <Table.Column className="text-end">Total</Table.Column>
+                <Table.Column>Status</Table.Column>
+              </Table.Header>
+              <Table.Body items={estimates.data ?? []} renderEmptyState={() => <EmptyState className="py-4 text-center text-sm text-muted">{estimates.isPending ? <Spinner size="sm" /> : 'No estimates yet.'}</EmptyState>}>
+                {(e) => (
+                  <Table.Row id={e.id} className="cursor-pointer">
+                    <Table.Cell className="whitespace-nowrap">{estimateNumber(e.id)}</Table.Cell>
+                    <Table.Cell className="whitespace-nowrap tabular-nums">{formatDate(e.dateCreated)}</Table.Cell>
+                    <Table.Cell>{vehicleName(e.vehicle)}</Table.Cell>
+                    <Table.Cell className="text-end tabular-nums">{formatMoney(bill(e))}</Table.Cell>
+                    <Table.Cell>
+                      <EstimateStatusChip estimate={e} />
                     </Table.Cell>
                   </Table.Row>
                 )}

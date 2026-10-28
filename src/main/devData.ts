@@ -1,6 +1,7 @@
 import { existsSync, rmSync } from 'fs'
 import { join } from 'path'
 import { bill } from '../shared/billing'
+import { ESTIMATE_VALID_DAYS } from '../shared/estimates'
 import type { AutoPart, Customer, Labor, Payment, PaymentMethod, Vehicle, WorkOrder } from '../shared/types'
 import { createRepos, type Repos } from './db'
 import { SessionStore } from './session'
@@ -94,6 +95,56 @@ export interface SeedSummary {
   parts: number
   /** Work order numbers of the invoice examples (see addInvoiceExamples). */
   invoiceExamples: { semiFilled: number; empty: number; long: number }
+  estimates: { total: number; open: number; expired: number; accepted: number; declined: number }
+}
+
+/**
+ * About 25 estimates from the last four months. Older ones were mostly accepted (their work orders done and
+ * paid) or declined; some went unanswered and have expired; recent ones are open. Uses its own random
+ * sequence so adding estimates didn't change the rest of the demo data.
+ */
+function addDemoEstimates(repos: Repos, owners: { customer: Customer; vehicles: Vehicle[] }[], taxRate: number, laborRate: number, today: Date): SeedSummary['estimates'] {
+  const r = makeRandom(20261027)
+  const counts = { total: 0, open: 0, expired: 0, accepted: 0, declined: 0 }
+  for (let i = 0; i < 25; i++) {
+    const daysAgo = Math.round((120 * i) / 24) + r.int(0, 3)
+    const created = addDays(today, -daysAgo)
+    const { customer, vehicles } = r.pick(owners)
+    const vehicle = r.pick(vehicles)
+    const parts: AutoPart[] = Array.from({ length: r.int(1, 5) }, () => {
+      const [desc, name, retailPrice, listPrice, taxable] = r.pick(PARTS)
+      return { id: 0, name, desc, retailPrice, listPrice, quantity: name === 'SPAKPLUG' ? 4 : 1, taxable }
+    })
+    const labor: Labor[] = Array.from({ length: r.int(1, 2) }, () => ({ id: 0, code: '', desc: r.pick(LABOR), billedHrs: r.pick([0.5, 1, 1.5, 2, 3, 4]), rate: laborRate, taxable: true }))
+    const estimate = repos.estimates.save({
+      id: 0,
+      dateCreated: iso(created),
+      validUntil: iso(addDays(created, ESTIMATE_VALID_DAYS)),
+      customer,
+      vehicle: { ...vehicle, mileageIn: String(r.int(20_000, 180_000)), mileageOut: '' },
+      taxRate,
+      parts,
+      labor,
+      status: 'open',
+      workOrderId: null
+    })
+    counts.total++
+    // Customers answer within a couple of weeks, or not at all.
+    const outcome = daysAgo < 10 ? 'open' : r.pick(['accepted', 'accepted', 'accepted', 'declined', 'open'] as const)
+    if (outcome === 'accepted') {
+      const accepted = addDays(created, r.int(0, Math.min(6, daysAgo - 4)))
+      const done = addDays(accepted, r.int(1, 3))
+      const workOrder = repos.estimates.convert(estimate.id, iso(accepted))
+      const completed = repos.workOrders.save({ ...workOrder, dateCompleted: iso(done), vehicle: { ...workOrder.vehicle, mileageOut: String(Number(workOrder.vehicle.mileageIn) + r.int(1, 8)) } })
+      repos.workOrders.save({ ...completed, payments: [{ id: 0, date: iso(done), method: r.pick(['Cash', 'Credit', 'Check'] as const), amount: Math.round(bill(completed) * 100) / 100 }] })
+      counts.accepted++
+    } else if (outcome === 'declined') {
+      repos.estimates.setStatus(estimate.id, 'declined')
+      counts.declined++
+    } else if (daysAgo > ESTIMATE_VALID_DAYS) counts.expired++
+    else counts.open++
+  }
+  return counts
 }
 
 /**
@@ -146,7 +197,15 @@ function addInvoiceExamples(repos: Repos, owners: { customer: Customer; vehicles
 export function seedDemoData(repos: Repos, taxRate: number, laborRate: number, today = new Date()): SeedSummary {
   const r = makeRandom(20260601)
   const owners: { customer: Customer; vehicles: Vehicle[] }[] = []
-  let summary: SeedSummary = { customers: 0, vehicles: 0, workOrders: 0, open: 0, parts: 0, invoiceExamples: { semiFilled: 0, empty: 0, long: 0 } }
+  let summary: SeedSummary = {
+    customers: 0,
+    vehicles: 0,
+    workOrders: 0,
+    open: 0,
+    parts: 0,
+    invoiceExamples: { semiFilled: 0, empty: 0, long: 0 },
+    estimates: { total: 0, open: 0, expired: 0, accepted: 0, declined: 0 }
+  }
 
   repos.db.transaction(() => {
     for (const [desc, name, retailPrice, listPrice, taxable] of PARTS) repos.parts.remember({ name, desc, retailPrice, listPrice, quantity: 1, taxable })
@@ -239,7 +298,17 @@ export function seedDemoData(repos: Repos, taxRate: number, laborRate: number, t
       if (!completedIso) open++
     }
     const invoiceExamples = addInvoiceExamples(repos, owners, taxRate, laborRate, today)
-    summary = { customers: owners.length, vehicles: owners.reduce((s, o) => s + o.vehicles.length, 0), workOrders: workOrders + 3, open: open + 1, parts: PARTS.length, invoiceExamples }
+    const estimates = addDemoEstimates(repos, owners, taxRate, laborRate, today)
+    summary = {
+      customers: owners.length,
+      vehicles: owners.reduce((s, o) => s + o.vehicles.length, 0),
+      // Accepted estimates became (completed) work orders too.
+      workOrders: workOrders + 3 + estimates.accepted,
+      open: open + 1,
+      parts: PARTS.length,
+      invoiceExamples,
+      estimates
+    }
   })()
   return summary
 }
@@ -272,6 +341,8 @@ export function runDevDbCommand(action: DevDbAction, dataDir: string, settings: 
     const session = new SessionStore(join(dataDir, 'session.json'))
     for (const id of [s.invoiceExamples.long, s.invoiceExamples.empty, s.invoiceExamples.semiFilled]) session.addRecent(id)
     console.log(`Seeded the dev database: ${s.customers} customers, ${s.vehicles} vehicles, ${s.workOrders} work orders (${s.open} open), ${s.parts} catalog parts.`)
+    const e = s.estimates
+    console.log(`Estimates: ${e.total} (${e.open} open, ${e.expired} expired, ${e.accepted} accepted, ${e.declined} declined).`)
     console.log(`Invoice examples (also under "Recently saved" on the dashboard): #${s.invoiceExamples.semiFilled} semi-filled, #${s.invoiceExamples.empty} empty, #${s.invoiceExamples.long} long (two pages).`)
     console.log(`Location: ${join(dataDir, 'autoshop.db')}`)
     return 0

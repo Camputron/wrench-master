@@ -10,7 +10,7 @@ test('previews the invoice and saves it as a PDF', async ({ page, dataDir, stubF
   await stubFileDialogs({ save: [pdf] })
   await page.getByRole('tab', { name: 'Work Orders' }).click()
   await page.getByRole('grid', { name: 'Work orders' }).getByRole('rowheader', { name: '1', exact: true }).dblclick()
-  await menu('Print Work Order…')
+  await menu('Print…')
 
   const preview = page.getByRole('dialog', { name: 'Print work order #1' })
   const invoice = preview.frameLocator('iframe')

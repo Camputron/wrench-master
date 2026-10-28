@@ -190,7 +190,7 @@ describe('opening an existing database', () => {
     r.db.close()
     r = createRepos(file)
     expect(r.workOrders.list()).toHaveLength(3)
-    expect(r.db.prepare(`select count(*) as n from sqlite_master where type = 'index' and name like 'idx_%'`).get()).toEqual({ n: 5 })
+    expect(r.db.prepare(`select count(*) as n from sqlite_master where type = 'index' and name like 'idx_%'`).get()).toEqual({ n: 8 })
   })
 })
 

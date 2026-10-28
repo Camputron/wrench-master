@@ -1,7 +1,7 @@
 import ExcelJS from 'exceljs'
 import { join } from 'path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { balance } from '../../../src/shared/billing'
+import { balance, bill } from '../../../src/shared/billing'
 import { createRepos, type Repos } from '../../../src/main/db'
 import { EXPORT_FILE_NAMES, exportToExcel, type ExportKind } from '../../../src/main/excelExport'
 import { createJavaDb } from '../../fixtures/javaDb'
@@ -58,6 +58,30 @@ describe('Excel export', () => {
     expect(book.getWorksheet('Parts')!.rowCount - 1).toBe(2)
     expect(book.getWorksheet('Labor')!.rowCount - 1).toBe(2)
     expect(book.getWorksheet('Payments')!.rowCount - 1).toBe(2)
+  })
+
+  it('exports estimates with their status, total, and work order', async () => {
+    const wo = r.workOrders.getById(1)!
+    const estimate = r.estimates.save({
+      id: 0,
+      dateCreated: '2026-10-01',
+      validUntil: '2026-10-31',
+      customer: wo.customer,
+      vehicle: wo.vehicle,
+      taxRate: wo.taxRate,
+      parts: wo.parts.map((p) => ({ ...p, id: 0 })),
+      labor: wo.labor.map((l) => ({ ...l, id: 0 })),
+      status: 'open',
+      workOrderId: null
+    })
+    const converted = r.estimates.convert(estimate.id)
+    const { count, book } = await exportAndRead('estimates')
+    expect(count).toBe(1)
+    const sheet = book.getWorksheet('Estimates')!
+    expect(header(sheet)).toEqual(['Estimate #', 'Created', 'Valid until', 'Status', 'Work order #', 'Customer', 'Company', 'Phone', 'Vehicle', 'VIN', 'Tax', 'Total'])
+    const row = sheet.getRow(2)
+    expect([row.getCell(1).value, row.getCell(4).value, row.getCell(5).value]).toEqual(['E-00001', 'Accepted', converted.id])
+    expect(row.getCell(12).value).toBe(Math.round(bill(wo) * 100) / 100)
   })
 
   it('exports the parts catalog', async () => {

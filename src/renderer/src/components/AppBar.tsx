@@ -6,7 +6,8 @@ import AvatarDropdownMenu, { type AvatarMenuAction } from './AvatarDropdownMenu'
 const PAGES: { id: Page; label: string }[] = [
   { id: 'dashboard', label: 'Dashboard' },
   { id: 'customers', label: 'Customers' },
-  { id: 'workOrders', label: 'Work Orders' }
+  { id: 'workOrders', label: 'Work Orders' },
+  { id: 'estimates', label: 'Estimates' }
 ]
 
 interface Props {

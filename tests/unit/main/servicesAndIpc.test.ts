@@ -44,14 +44,20 @@ describe('IPC handlers', () => {
     expect(await h.session.openWorkOrderIds()).toEqual([b.id])
   })
 
-  it('sanitize the unsaved-changes count the renderer reports', async () => {
+  it('sanitize the unsaved-changes counts the renderer reports, and describe them', async () => {
     const h = createHandlers(services)
-    await h.app.setUnsavedChanges(2)
+    await h.app.setUnsavedChanges('workOrder', 2)
     expect(services.unsavedChanges).toBe(2)
-    await h.app.setUnsavedChanges('lots' as unknown as number)
+    expect(services.describeUnsaved()).toBe('2 work orders')
+    await h.app.setUnsavedChanges('estimate', 1)
+    expect(services.unsavedChanges).toBe(3)
+    expect(services.describeUnsaved()).toBe('2 work orders and an estimate')
+    await h.app.setUnsavedChanges('workOrder', 'lots' as unknown as number)
+    await h.app.setUnsavedChanges('nonsense' as 'estimate', 5)
+    expect(services.describeUnsaved()).toBe('An estimate')
+    await h.app.setUnsavedChanges('estimate', -1)
     expect(services.unsavedChanges).toBe(0)
-    await h.app.setUnsavedChanges(-1)
-    expect(services.unsavedChanges).toBe(0)
+    expect(services.describeUnsaved()).toBeNull()
   })
 
   it('report app info', async () => {

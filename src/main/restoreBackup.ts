@@ -35,7 +35,7 @@ export async function restoreFromBackup(win: BrowserWindow, services: Services):
     message: `Restore the backup${when}?`,
     detail:
       `It has ${plural(counts.customers, 'customer')} and ${plural(counts.workOrders, 'work order')}. ` +
-      'Restoring replaces every customer, vehicle, and work order in the app with the ones in the backup. A backup of the current data is saved first.' +
+      'Restoring replaces every customer, vehicle, work order, and estimate in the app with the ones in the backup. A backup of the current data is saved first.' +
       unsavedWarning(services),
     buttons: ['Restore', 'Cancel'],
     defaultId: 1,

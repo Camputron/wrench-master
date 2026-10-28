@@ -1,13 +1,15 @@
 import { Toast, toast } from '@heroui/react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useCallback, useState, type ReactNode } from 'react'
-import type { Page } from '../../shared/types'
+import type { DocumentKind, Page } from '../../shared/types'
 import AppBar from './components/AppBar'
 import type { AvatarMenuAction } from './components/AvatarDropdownMenu'
 import AboutModal from './components/modals/AboutModal'
 import PreferencesModal from './components/modals/PreferencesModal'
-import { useEditors } from './editors/editorsContext'
+import { useEditors, useEstimateEditors } from './editors/editorsContext'
 import { isDirty } from './editors/editorsReducer'
+import EstimateEditorsProvider from './editors/EstimateEditorsProvider'
+import { useSaveEstimate } from './editors/estimateActions'
 import { useSaveWorkOrder } from './editors/useSaveWorkOrder'
 import WorkOrderEditorsProvider from './editors/WorkOrderEditorsProvider'
 import { useAppEvent } from './hooks/useAppEvent'
@@ -15,6 +17,7 @@ import { useColorScheme } from './hooks/useColorScheme'
 import { useSettings } from './hooks/useSettings'
 import CustomersPage from './pages/CustomersPage'
 import DashboardPage from './pages/DashboardPage'
+import EstimatesPage from './pages/EstimatesPage'
 import WorkOrdersPage from './pages/WorkOrdersPage'
 
 const isMac = navigator.userAgent.includes('Mac')
@@ -49,6 +52,16 @@ function KeepAlive({ active, children }: { active: boolean; children: ReactNode 
   )
 }
 
+/** The editor on screen, as the menu commands see it. */
+interface ShownEditor {
+  kind: DocumentKind
+  dirty: boolean
+  save: () => Promise<unknown>
+  close: () => void
+  undo: () => void
+  redo: () => void
+}
+
 interface ShellProps {
   page: Page
   setPage: (page: Page) => void
@@ -58,7 +71,9 @@ function Shell({ page, setPage }: ShellProps): React.ReactElement {
   const settings = useSettings()
   const queryClient = useQueryClient()
   const editors = useEditors()
+  const estimates = useEstimateEditors()
   const saveWorkOrder = useSaveWorkOrder()
+  const saveEstimate = useSaveEstimate()
   const [modal, setModal] = useState<AvatarMenuAction | null>(null)
   /** Bumped each time Preferences opens so the form starts from the saved settings. */
   const [preferencesKey, setPreferencesKey] = useState(0)
@@ -66,10 +81,13 @@ function Shell({ page, setPage }: ShellProps): React.ReactElement {
   const [dataVersion, setDataVersion] = useState(0)
   /** Bumped by File > New Customer. */
   const [newCustomerRequest, setNewCustomerRequest] = useState(0)
-  /** Bumped by File > Print Work Order. */
-  const [printRequest, setPrintRequest] = useState(0)
-  /** Bumped by File > Close Work Order when the work order has unsaved changes, so its editor asks first. */
-  const [closeRequest, setCloseRequest] = useState(0)
+  /**
+   * Bumped by File > Print, and by File > Close Tab when the document has unsaved changes (so its editor asks
+   * first). Kept per kind: both pages stay mounted, and only the editor on screen should respond.
+   */
+  const [printRequest, setPrintRequest] = useState({ workOrder: 0, estimate: 0 })
+  const [closeRequest, setCloseRequest] = useState({ workOrder: 0, estimate: 0 })
+  const bump = (kind: DocumentKind) => (r: Record<DocumentKind, number>) => ({ ...r, [kind]: r[kind] + 1 })
 
   const open = (which: AvatarMenuAction): void => {
     if (which === 'preferences') setPreferencesKey((k) => k + 1)
@@ -78,8 +96,14 @@ function Shell({ page, setPage }: ShellProps): React.ReactElement {
   const onOpenChange = (isOpen: boolean): void => {
     if (!isOpen) setModal(null)
   }
-  /** The work order editor on screen, if any. */
-  const shownEditor = page === 'workOrders' ? editors.active : null
+  /** The work order or estimate editor on screen, if any, and what the menu can do with it. */
+  const shownWorkOrder = page === 'workOrders' ? editors.active : null
+  const shownEstimate = page === 'estimates' ? estimates.active : null
+  const shown: ShownEditor | null = shownWorkOrder
+    ? { kind: 'workOrder', dirty: isDirty(shownWorkOrder), save: () => saveWorkOrder(shownWorkOrder.key), close: () => editors.close(shownWorkOrder.key), undo: () => editors.undo(shownWorkOrder.key), redo: () => editors.redo(shownWorkOrder.key) }
+    : shownEstimate
+      ? { kind: 'estimate', dirty: isDirty(shownEstimate), save: () => saveEstimate(shownEstimate.key), close: () => estimates.close(shownEstimate.key), undo: () => estimates.undo(shownEstimate.key), redo: () => estimates.redo(shownEstimate.key) }
+      : null
 
   useAppEvent('menu', (action) => {
     switch (action.type) {
@@ -93,22 +117,28 @@ function Shell({ page, setPage }: ShellProps): React.ReactElement {
       case 'newWorkOrder':
         editors.newWorkOrder()
         break
+      case 'newEstimate':
+        estimates.newEstimate()
+        break
       case 'save':
-        if (shownEditor) void saveWorkOrder(shownEditor.key)
+        if (shown) void shown.save()
         break
       case 'print':
-        if (shownEditor) setPrintRequest((n) => n + 1)
-        else toast.info('Open a work order to print it.')
+        if (shown) setPrintRequest(bump(shown.kind))
+        else toast.info('Open a work order or estimate to print it.')
         break
-      case 'closeWorkOrder':
-        // Cmd+W closes the window on macOS when there's no work order to close, as it does in other apps.
-        if (shownEditor && isDirty(shownEditor)) setCloseRequest((n) => n + 1)
-        else if (shownEditor) editors.close(shownEditor.key)
+      case 'closeTab':
+        // Cmd+W closes the window on macOS when there's nothing to close, as it does in other apps.
+        if (shown?.dirty) setCloseRequest(bump(shown.kind))
+        else if (shown) shown.close()
         else if (isMac) window.close()
         break
       case 'find':
         if (page === 'customers') focusSearch('Search customers')
-        else {
+        else if (page === 'estimates') {
+          estimates.showList()
+          focusSearch('Search estimates')
+        } else {
           setPage('workOrders')
           editors.showList()
           focusSearch('Search work orders')
@@ -116,8 +146,8 @@ function Shell({ page, setPage }: ShellProps): React.ReactElement {
         break
       case 'undo':
       case 'redo':
-        if (isEditingText() || !shownEditor) document.execCommand(action.type)
-        else editors[action.type](shownEditor.key)
+        if (isEditingText() || !shown) document.execCommand(action.type)
+        else shown[action.type]()
         break
       default:
         open(action.type)
@@ -129,8 +159,9 @@ function Shell({ page, setPage }: ShellProps): React.ReactElement {
     else toast.danger(message, options)
   })
   useAppEvent('data-changed', () => {
-    // Open editors refer to work orders from the old database.
+    // Open editors refer to work orders and estimates from the old database.
     for (const e of editors.editors) editors.close(e.key)
+    for (const e of estimates.editors) estimates.close(e.key)
     queryClient.clear()
     setDataVersion((v) => v + 1)
   })
@@ -148,7 +179,10 @@ function Shell({ page, setPage }: ShellProps): React.ReactElement {
             <CustomersPage newCustomerRequest={newCustomerRequest} />
           </KeepAlive>
           <KeepAlive active={page === 'workOrders'}>
-            <WorkOrdersPage printRequest={printRequest} closeRequest={closeRequest} />
+            <WorkOrdersPage printRequest={printRequest.workOrder} closeRequest={closeRequest.workOrder} />
+          </KeepAlive>
+          <KeepAlive active={page === 'estimates'}>
+            <EstimatesPage printRequest={printRequest.estimate} closeRequest={closeRequest.estimate} />
           </KeepAlive>
         </div>
       </main>
@@ -164,10 +198,13 @@ function App(): React.ReactElement {
   const settings = useSettings()
   const [page, setPage] = useState<Page>('dashboard')
   const showWorkOrders = useCallback(() => setPage('workOrders'), [])
+  const showEstimates = useCallback(() => setPage('estimates'), [])
 
   return (
     <WorkOrderEditorsProvider defaultTaxRate={settings?.taxRate ?? 0} onShow={showWorkOrders}>
-      <Shell page={page} setPage={setPage} />
+      <EstimateEditorsProvider defaultTaxRate={settings?.taxRate ?? 0} onShow={showEstimates}>
+        <Shell page={page} setPage={setPage} />
+      </EstimateEditorsProvider>
     </WorkOrderEditorsProvider>
   )
 }

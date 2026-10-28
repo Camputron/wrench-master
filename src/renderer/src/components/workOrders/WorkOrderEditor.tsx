@@ -124,7 +124,7 @@ export default function WorkOrderEditor({ editor, printRequest, closeRequest }: 
       {/* A voided work order is read-only: inert blocks clicks, typing, and focus in everything below. */}
       <div className={`flex gap-4 p-4 ${wo.dateVoided ? 'opacity-60' : ''}`} inert={!!wo.dateVoided}>
         <div className="flex min-w-0 flex-1 flex-col gap-4">
-          <CustomerVehicleSection workOrder={wo} onChange={typing} />
+          <CustomerVehicleSection doc={wo} onChange={typing} />
           <LineTable
             title="Parts"
             noun="part"
@@ -203,7 +203,7 @@ export default function WorkOrderEditor({ editor, printRequest, closeRequest }: 
           onSubmit={(payment) => setLines('payments', replaceAt(wo.payments, paymentDialog.index, payment))}
         />
       )}
-      {dialog?.kind === 'print' && <PrintPreviewModal key={dialogKey} isOpen onOpenChange={onDialogOpenChange} workOrder={wo} />}
+      {dialog?.kind === 'print' && <PrintPreviewModal key={dialogKey} isOpen onOpenChange={onDialogOpenChange} document={{ workOrder: wo }} />}
       {dialog?.kind === 'close' && (
         <ConfirmDialog key={dialogKey} isOpen onOpenChange={onDialogOpenChange} title={wo.id > 0 ? `Discard changes to work order #${wo.id}?` : 'Discard this new work order?'} confirmLabel="Discard changes" onConfirm={async () => close(key)}>
           <p>Your unsaved changes will be lost.</p>

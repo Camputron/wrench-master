@@ -100,6 +100,57 @@ create table if not exists work_order_void (
   date_voided date,
   foreign key (work_order_id) references work_order(work_order_id));
 
+-- Estimates (quotes), also not in the Java app. The same customer/vehicle snapshot and line columns as
+-- work orders. Numbered by their own autoincrement id, shown as E-00012.
+create table if not exists estimate (
+  estimate_id integer primary key autoincrement,
+  date_created date,
+  date_valid_until date,
+  status varchar(10) not null default 'open',
+  work_order_id integer,
+  customer_id integer,
+  customer_first_name varchar(64),
+  customer_last_name varchar(64),
+  customer_phone varchar(16),
+  customer_email varchar(64),
+  customer_company varchar(64),
+  customer_address varchar(64),
+  customer_city varchar(64),
+  customer_state varchar(32),
+  customer_zip character(9),
+  vehicle_vin character(17),
+  vehicle_year character(4),
+  vehicle_make varchar(64),
+  vehicle_model varchar(64),
+  vehicle_license_plate character(16),
+  vehicle_color varchar(16),
+  vehicle_engine varchar(16),
+  vehicle_transmission varchar(16),
+  vehicle_mileage_in varchar(10),
+  vehicle_mileage_out varchar(10),
+  tax_rate real);
+
+create table if not exists estimate_item (
+  estimate_item_id integer primary key autoincrement,
+  estimate_id integer,
+  item_name varchar(128),
+  item_desc varchar(256),
+  item_retail_price decimal(10,2),
+  item_list_price decimal(10,2),
+  item_quantity tinyint,
+  item_taxable boolean,
+  foreign key(estimate_id) references estimate(estimate_id));
+
+create table if not exists estimate_labor (
+  estimate_labor_id integer primary key autoincrement,
+  estimate_id integer,
+  labor_code varchar(10),
+  labor_desc varchar(256),
+  labor_billed_hrs decimal(10,2),
+  labor_rate decimal(10,2),
+  labor_taxable boolean,
+  foreign key (estimate_id) references estimate(estimate_id));
+
 create table if not exists counter (id varchar(16) primary key, value integer);
 insert or ignore into counter (id, value) values ('work.order.id', 1);
 
@@ -108,6 +159,9 @@ create index if not exists idx_work_order_customer on work_order(customer_id);
 create index if not exists idx_work_order_item_wo on work_order_item(work_order_id);
 create index if not exists idx_work_order_labor_wo on work_order_labor(work_order_id);
 create index if not exists idx_work_order_payment_wo on work_order_payment(work_order_id);
+create index if not exists idx_estimate_customer on estimate(customer_id);
+create index if not exists idx_estimate_item_est on estimate_item(estimate_id);
+create index if not exists idx_estimate_labor_est on estimate_labor(estimate_id);
 `
 
 export function openDatabase(file: string): Database.Database {

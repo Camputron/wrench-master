@@ -1,16 +1,24 @@
 import { Button, toast } from '@heroui/react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
-import type { Customer, WorkOrder, WorkOrderVehicle } from '../../../../shared/types'
+import type { Customer, WorkOrderVehicle } from '../../../../shared/types'
 import { cleanVin, customerName, formatPhone, isCompleteVin, vehicleName } from '../../lib/format'
 import { keys } from '../../lib/queryClient'
 import { AutocompleteInput, StateInput, TextInput } from '../fields/Fields'
 import { CustomerPickerModal, VehiclePickerModal } from './PickerModals'
 
-interface Props {
-  workOrder: WorkOrder
+/** A work order or estimate: both record a copy of the customer and vehicle. */
+interface WithCustomerAndVehicle {
+  customer: Customer
+  vehicle: WorkOrderVehicle
+}
+
+interface Props<T extends WithCustomerAndVehicle> {
+  doc: T
   /** Updates the draft (not recorded for undo; these are typing edits). */
-  onChange: (update: (wo: WorkOrder) => WorkOrder) => void
+  onChange: (update: (doc: T) => T) => void
+  /** Estimates only record the mileage when the car came in. */
+  hideMileageOut?: boolean
 }
 
 function Card({ title, actions, children }: { title: string; actions?: React.ReactNode; children: React.ReactNode }): React.ReactElement {
@@ -26,14 +34,14 @@ function Card({ title, actions, children }: { title: string; actions?: React.Rea
 }
 
 /**
- * The customer and vehicle as recorded on this work order. Choosing a saved customer or vehicle copies
- * its details here; edits here only change this work order unless saved back to the customer's record.
+ * The customer and vehicle as recorded on this work order or estimate. Choosing a saved customer or vehicle
+ * copies its details here; edits here only change this document unless saved back to the customer's record.
  */
-export default function CustomerVehicleSection({ workOrder, onChange }: Props): React.ReactElement {
+export default function CustomerVehicleSection<T extends WithCustomerAndVehicle>({ doc, onChange, hideMileageOut = false }: Props<T>): React.ReactElement {
   const queryClient = useQueryClient()
   const [picker, setPicker] = useState<'customer' | 'vehicle' | null>(null)
   const [busy, setBusy] = useState<'customer' | 'vehicle' | 'decode' | null>(null)
-  const { customer, vehicle } = workOrder
+  const { customer, vehicle } = doc
   const { data: customerSuggestions } = useQuery({ queryKey: keys.customerSuggestions, queryFn: () => window.api.customers.suggestions() })
   const { data: vehicleSuggestions } = useQuery({ queryKey: keys.vehicleSuggestions, queryFn: () => window.api.vehicles.suggestions() })
 
@@ -152,8 +160,8 @@ export default function CustomerVehicleSection({ workOrder, onChange }: Props): 
           <AutocompleteInput className="col-span-1" label="Color" value={vehicle.color} onChange={setVehicle('color')} suggestions={vehicleSuggestions?.color ?? []} />
           <AutocompleteInput className="col-span-2" label="Engine" value={vehicle.engine} onChange={setVehicle('engine')} suggestions={vehicleSuggestions?.engine ?? []} />
           <AutocompleteInput className="col-span-2" label="Transmission" value={vehicle.transmission} onChange={setVehicle('transmission')} suggestions={vehicleSuggestions?.transmission ?? []} />
-          <TextInput className="col-span-1" label="Mileage in" value={vehicle.mileageIn} onChange={setVehicle('mileageIn')} transform={(v) => v.replace(/\D/g, '').slice(0, 9)} />
-          <TextInput className="col-span-1" label="Mileage out" value={vehicle.mileageOut} onChange={setVehicle('mileageOut')} transform={(v) => v.replace(/\D/g, '').slice(0, 9)} />
+          <TextInput className={hideMileageOut ? 'col-span-2' : 'col-span-1'} label={hideMileageOut ? 'Mileage' : 'Mileage in'} value={vehicle.mileageIn} onChange={setVehicle('mileageIn')} transform={(v) => v.replace(/\D/g, '').slice(0, 9)} />
+          {!hideMileageOut && <TextInput className="col-span-1" label="Mileage out" value={vehicle.mileageOut} onChange={setVehicle('mileageOut')} transform={(v) => v.replace(/\D/g, '').slice(0, 9)} />}
         </div>
       </Card>
 

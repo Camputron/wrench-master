@@ -19,6 +19,8 @@ export const keys = {
   vehiclesOf: (customerId: number) => ['vehicles', 'customer', customerId] as const,
   vehicleSuggestions: ['vehicles', 'suggestions'] as const,
   workOrders: ['workOrders'] as const,
+  estimates: ['estimates'] as const,
+  estimatesOf: (customerId: number) => ['estimates', 'customer', customerId] as const,
   workOrdersOf: (customerId: number) => ['workOrders', 'customer', customerId] as const,
   // Dashboard data lives under 'workOrders' so saving or deleting a work order refreshes it.
   workOrderStats: ['workOrders', 'stats'] as const,

@@ -46,12 +46,13 @@ export function buildMenu(h: MenuHandlers): Menu {
       label: 'File',
       submenu: [
         { label: 'New Work Order', accelerator: 'CmdOrCtrl+N', click: () => h.send({ type: 'newWorkOrder' }) },
+        { label: 'New Estimate', accelerator: 'Shift+CmdOrCtrl+N', click: () => h.send({ type: 'newEstimate' }) },
         { label: 'New Customer…', click: () => h.send({ type: 'newCustomer' }) },
         { type: 'separator' },
-        { label: 'Save Work Order', accelerator: 'CmdOrCtrl+S', click: () => h.send({ type: 'save' }) },
-        { label: 'Print Work Order…', accelerator: 'CmdOrCtrl+P', click: () => h.send({ type: 'print' }) },
-        // Replaces the standard Close Window item (also Cmd+W); the renderer closes the window when no work order is shown.
-        { label: 'Close Work Order', accelerator: 'CmdOrCtrl+W', click: () => h.send({ type: 'closeWorkOrder' }) },
+        { label: 'Save', accelerator: 'CmdOrCtrl+S', click: () => h.send({ type: 'save' }) },
+        { label: 'Print…', accelerator: 'CmdOrCtrl+P', click: () => h.send({ type: 'print' }) },
+        // Replaces the standard Close Window item (also Cmd+W); the renderer closes the window when no work order or estimate is shown.
+        { label: 'Close Tab', accelerator: 'CmdOrCtrl+W', click: () => h.send({ type: 'closeTab' }) },
         { type: 'separator' },
         { label: 'Import from Autoshop Invoice Manager…', click: () => h.importFromJavaApp() },
         {
@@ -60,6 +61,7 @@ export function buildMenu(h: MenuHandlers): Menu {
             { label: 'Customers…', click: () => h.exportData('customers') },
             { label: 'Vehicles…', click: () => h.exportData('vehicles') },
             { label: 'Work Orders…', click: () => h.exportData('workOrders') },
+            { label: 'Estimates…', click: () => h.exportData('estimates') },
             { label: 'Parts Catalog…', click: () => h.exportData('parts') }
           ]
         },
@@ -89,7 +91,8 @@ export function buildMenu(h: MenuHandlers): Menu {
       submenu: [
         { label: 'Dashboard', accelerator: 'CmdOrCtrl+1', click: () => h.send({ type: 'navigate', page: 'dashboard' }) },
         { label: 'Customers', accelerator: 'CmdOrCtrl+2', click: () => h.send({ type: 'navigate', page: 'customers' }) },
-        { label: 'Work Orders', accelerator: 'CmdOrCtrl+3', click: () => h.send({ type: 'navigate', page: 'workOrders' }) }
+        { label: 'Work Orders', accelerator: 'CmdOrCtrl+3', click: () => h.send({ type: 'navigate', page: 'workOrders' }) },
+        { label: 'Estimates', accelerator: 'CmdOrCtrl+4', click: () => h.send({ type: 'navigate', page: 'estimates' }) }
       ]
     },
     {

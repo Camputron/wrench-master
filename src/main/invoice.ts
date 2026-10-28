@@ -1,6 +1,7 @@
 import { balance, bill, laborsSubtotal, laborSubtotal, partsSubtotal, partSubtotal, subtotal, tax, totalPayments } from '../shared/billing'
 import { stateByKey } from '../shared/states'
-import type { Settings, WorkOrder } from '../shared/types'
+import { estimateNumber } from '../shared/estimates'
+import type { AutoPart, Customer, Estimate, Labor, Settings, WorkOrder, WorkOrderVehicle } from '../shared/types'
 
 const money = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' })
 const fmt = (n: number): string => money.format(Math.abs(n) < 0.005 ? 0 : n)
@@ -24,9 +25,11 @@ function address(parts: { street: string; city: string; state: string; zip: stri
   return [parts.street, [parts.city, [state, parts.zip].filter(Boolean).join(' ')].filter(Boolean).join(', ')].filter((s) => s.trim()).join(', ')
 }
 
-function mileage(wo: WorkOrder): string {
-  const { mileageIn, mileageOut } = wo.vehicle
+/** "42,015 → 42,018 (3 mi)", or "In 42,015"; estimates (`single`) only record one reading: "42,015". */
+function mileage(vehicle: WorkOrderVehicle, single = false): string {
+  const { mileageIn, mileageOut } = vehicle
   const n = (s: string): string => (/^\d+$/.test(s) ? Number(s).toLocaleString('en-US') : s)
+  if (single) return n(mileageIn)
   if (mileageIn && mileageOut && /^\d+$/.test(mileageIn) && /^\d+$/.test(mileageOut)) return `${n(mileageIn)} → ${n(mileageOut)} (${(Number(mileageOut) - Number(mileageIn)).toLocaleString('en-US')} mi)`
   return [mileageIn && `In ${n(mileageIn)}`, mileageOut && `Out ${n(mileageOut)}`].filter(Boolean).join(' · ')
 }
@@ -74,45 +77,55 @@ const STYLE = `
   .totals .strong td { font-weight: 700; border-top: 1px solid #111; padding-top: 3px; }
   .totals .due td { font-size: 11pt; font-weight: 700; border-top: 1.5px solid #111; padding-top: 4px; }
   .note { font-size: 8pt; color: #555; margin: 3px 0 0; }
+  .authorize { flex: 1; max-width: 4in; }
+  .authorize p { margin: 0; }
+  .sign { display: flex; gap: 16px; margin-top: 28px; }
+  .sign span { flex: 2; border-top: 1px solid #111; padding-top: 2px; font-size: 8pt; color: #555; }
+  .sign span:last-child { flex: 1; }
 `
 
-/** The printable invoice for a work order, as a complete HTML page (always light, US Letter). */
-export function invoiceHtml(wo: WorkOrder, settings: Settings): string {
+/** What both printed documents show: who it's for, the vehicle, and the parts and labor. */
+interface DocumentContent {
+  customer: Customer
+  vehicle: WorkOrderVehicle
+  parts: AutoPart[]
+  labor: Labor[]
+}
+
+/**
+ * The page shared by invoices and estimates (always light, US Letter): shop header, customer and vehicle,
+ * parts and labor, then `bottomLeft` and the `totals` rows pinned to the bottom of the page.
+ */
+function documentHtml(title: string, meta: string, doc: DocumentContent, settings: Settings, bottomLeft: string, totals: string, singleMileage = false): string {
   const { shop } = settings
-  const c = wo.customer
-  const v = wo.vehicle
+  const c = doc.customer
+  const v = doc.vehicle
   const stateAbbr = stateByKey(shop.state)?.abbreviation ?? ''
   const shopId = shop.repairShopId.trim() ? `${stateAbbr ? `${stateAbbr}S ` : ''}Repair Shop #${shop.repairShopId.trim()}` : ''
-  const anyUntaxed = wo.parts.some((p) => !p.taxable) || wo.labor.some((l) => !l.taxable)
   const untaxedMark = (taxable: boolean): string => (taxable ? '' : ' *')
 
-  const parts = wo.parts.length
-    ? wo.parts
+  const parts = doc.parts.length
+    ? doc.parts
         .map(
           (p) =>
             `<tr><td class="code">${escapeHtml(p.name)}</td><td class="desc">${escapeHtml(p.desc)}</td><td class="num">${p.quantity}</td><td class="num">${fmt(p.retailPrice)}</td><td class="num">${fmt(partSubtotal(p))}${untaxedMark(p.taxable)}</td></tr>`
         )
         .join('')
     : `<tr><td colspan="5" class="empty">No parts</td></tr>`
-  const labor = wo.labor.length
-    ? wo.labor
+  const labor = doc.labor.length
+    ? doc.labor
         .map(
           (l) => `<tr><td class="code">${escapeHtml(l.code)}</td><td class="desc">${escapeHtml(l.desc)}</td><td class="num">${l.billedHrs}</td><td class="num">${fmt(l.rate)}</td><td class="num">${fmt(laborSubtotal(l))}${untaxedMark(l.taxable)}</td></tr>`
         )
         .join('')
     : `<tr><td colspan="5" class="empty">No labor</td></tr>`
-  const payments = wo.payments.length
-    ? `<table><thead><tr><th>Payment date</th><th>Method</th><th class="num">Amount</th></tr></thead><tbody>${wo.payments
-        .map((p) => `<tr><td>${date(p.date)}</td><td>${escapeHtml(p.method)}</td><td class="num">${fmt(p.amount)}</td></tr>`)
-        .join('')}</tbody></table>`
-    : ''
 
   return `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'">
-<title>Work order ${escapeHtml(invoiceNumber(wo))}</title>
+<title>${escapeHtml(title)}</title>
 <style>${STYLE}</style>
 </head>
 <body>
@@ -126,10 +139,7 @@ export function invoiceHtml(wo: WorkOrder, settings: Settings): string {
       ${shop.invoiceTitle ? `<p class="title">${escapeHtml(shop.invoiceTitle)}</p>` : ''}
     </div>
     <div class="meta">
-      <p class="number">Work order ${escapeHtml(invoiceNumber(wo))}</p>
-      <p>Date ${date(wo.dateCreated)}</p>
-      ${wo.dateCompleted ? `<p>Completed ${date(wo.dateCompleted)}</p>` : ''}
-      ${wo.dateVoided ? `<p class="void">VOID ${date(wo.dateVoided)}</p>` : ''}
+      ${meta}
     </div>
   </header>
 
@@ -153,7 +163,7 @@ export function invoiceHtml(wo: WorkOrder, settings: Settings): string {
         ${field('Color', v.color)}
         ${field('Engine', v.engine)}
         ${field('Transmission', v.transmission, true)}
-        ${field('Mileage', mileage(wo), true)}
+        ${field('Mileage', mileage(v, singleMileage), true)}
       </dl>
     </section>
   </div>
@@ -173,18 +183,9 @@ export function invoiceHtml(wo: WorkOrder, settings: Settings): string {
   </div>
 
   <div class="bottom">
-    <div class="payments">
-      ${payments}
-      ${anyUntaxed ? `<p class="note">* Not taxed</p>` : ''}
-    </div>
+    ${bottomLeft}
     <table class="totals">
-      <tr><td>Parts</td><td class="num">${fmt(partsSubtotal(wo))}</td></tr>
-      <tr><td>Labor</td><td class="num">${fmt(laborsSubtotal(wo))}</td></tr>
-      <tr><td>Subtotal</td><td class="num">${fmt(subtotal(wo))}</td></tr>
-      <tr><td>Sales tax</td><td class="num">${fmt(tax(wo))}</td></tr>
-      <tr class="strong"><td>Total</td><td class="num">${fmt(bill(wo))}</td></tr>
-      <tr><td>Payments</td><td class="num">${totalPayments(wo) > 0 ? '−' : ''}${fmt(totalPayments(wo))}</td></tr>
-      <tr class="due"><td>Amount due</td><td class="num">${fmt(balance(wo))}</td></tr>
+      ${totals}
     </table>
   </div>
 </div>
@@ -192,9 +193,67 @@ export function invoiceHtml(wo: WorkOrder, settings: Settings): string {
 </html>`
 }
 
+const anyUntaxed = (doc: DocumentContent): boolean => doc.parts.some((p) => !p.taxable) || doc.labor.some((l) => !l.taxable)
+
+/** The printable invoice for a work order, as a complete HTML page (always light, US Letter). */
+export function invoiceHtml(wo: WorkOrder, settings: Settings): string {
+  const payments = wo.payments.length
+    ? `<table><thead><tr><th>Payment date</th><th>Method</th><th class="num">Amount</th></tr></thead><tbody>${wo.payments
+        .map((p) => `<tr><td>${date(p.date)}</td><td>${escapeHtml(p.method)}</td><td class="num">${fmt(p.amount)}</td></tr>`)
+        .join('')}</tbody></table>`
+    : ''
+  const meta = `<p class="number">Work order ${escapeHtml(invoiceNumber(wo))}</p>
+      <p>Date ${date(wo.dateCreated)}</p>
+      ${wo.dateCompleted ? `<p>Completed ${date(wo.dateCompleted)}</p>` : ''}
+      ${wo.dateVoided ? `<p class="void">VOID ${date(wo.dateVoided)}</p>` : ''}`
+  const bottomLeft = `<div class="payments">
+      ${payments}
+      ${anyUntaxed(wo) ? `<p class="note">* Not taxed</p>` : ''}
+    </div>`
+  const totals = `<tr><td>Parts</td><td class="num">${fmt(partsSubtotal(wo))}</td></tr>
+      <tr><td>Labor</td><td class="num">${fmt(laborsSubtotal(wo))}</td></tr>
+      <tr><td>Subtotal</td><td class="num">${fmt(subtotal(wo))}</td></tr>
+      <tr><td>Sales tax</td><td class="num">${fmt(tax(wo))}</td></tr>
+      <tr class="strong"><td>Total</td><td class="num">${fmt(bill(wo))}</td></tr>
+      <tr><td>Payments</td><td class="num">${totalPayments(wo) > 0 ? '−' : ''}${fmt(totalPayments(wo))}</td></tr>
+      <tr class="due"><td>Amount due</td><td class="num">${fmt(balance(wo))}</td></tr>`
+  return documentHtml(`Work order ${invoiceNumber(wo)}`, meta, wo, settings, bottomLeft, totals)
+}
+
+/**
+ * The printable estimate, as a complete HTML page: the same layout as the invoice, with the date the prices
+ * hold until and a line for the customer to sign, approving the work.
+ */
+export function estimateHtml(e: Estimate, settings: Settings): string {
+  const status = e.status === 'accepted' && e.workOrderId ? `<p>Accepted · work order #${String(e.workOrderId).padStart(5, '0')}</p>` : e.status === 'declined' ? `<p class="void">DECLINED</p>` : ''
+  const meta = `<p class="number">Estimate ${escapeHtml(estimateNumber(e.id))}</p>
+      <p>Date ${date(e.dateCreated)}</p>
+      <p>Valid until ${date(e.validUntil)}</p>
+      ${status}`
+  const bottomLeft = `<div class="authorize">
+      <p>I authorize the repairs listed above at the estimated cost. Prices are valid until ${date(e.validUntil)}.</p>
+      <div class="sign"><span>Customer signature</span><span>Date</span></div>
+      ${anyUntaxed(e) ? `<p class="note">* Not taxed</p>` : ''}
+    </div>`
+  const totals = `<tr><td>Parts</td><td class="num">${fmt(partsSubtotal(e))}</td></tr>
+      <tr><td>Labor</td><td class="num">${fmt(laborsSubtotal(e))}</td></tr>
+      <tr><td>Subtotal</td><td class="num">${fmt(subtotal(e))}</td></tr>
+      <tr><td>Sales tax</td><td class="num">${fmt(tax(e))}</td></tr>
+      <tr class="due"><td>Estimated total</td><td class="num">${fmt(bill(e))}</td></tr>`
+  return documentHtml(`Estimate ${estimateNumber(e.id)}`, meta, e, settings, bottomLeft, totals, true)
+}
+
+const fileNameWho = (c: Customer): string => (c.lastName || c.company || c.firstName).replace(/[\\/:*?"<>|]/g, '').trim()
+
 /** A file name like "Work Order 00012 - Doe.pdf". */
 export function invoiceFileName(wo: WorkOrder): string {
-  const who = (wo.customer.lastName || wo.customer.company || wo.customer.firstName).replace(/[\\/:*?"<>|]/g, '').trim()
+  const who = fileNameWho(wo.customer)
   const number = wo.id > 0 ? String(wo.id).padStart(5, '0') : 'Draft'
   return `Work Order ${number}${who ? ` - ${who}` : ''}.pdf`
+}
+
+/** A file name like "Estimate E-00012 - Doe.pdf". */
+export function estimateFileName(e: Estimate): string {
+  const who = fileNameWho(e.customer)
+  return `Estimate ${e.id > 0 ? estimateNumber(e.id) : 'Draft'}${who ? ` - ${who}` : ''}.pdf`
 }

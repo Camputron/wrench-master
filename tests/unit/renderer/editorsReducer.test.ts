@@ -9,10 +9,10 @@ const keys = (s: EditorsState): string[] => s.editors.map((e) => e.key)
 
 describe('open work order editors', () => {
   it('opens each work order once, switching to it if already open', () => {
-    let s = run({ type: 'open', workOrder: wo(5), activate: true }, { type: 'open', workOrder: wo(6), activate: false })
+    let s = run({ type: 'open', doc: wo(5), activate: true }, { type: 'open', doc: wo(6), activate: false })
     expect(keys(s)).toEqual(['wo-5', 'wo-6'])
     expect(s.active).toBe('wo-5')
-    s = editorsReducer(s, { type: 'open', workOrder: { ...wo(6), parts: [emptyPart()] }, activate: true })
+    s = editorsReducer(s, { type: 'open', doc: { ...wo(6), parts: [emptyPart()] }, activate: true })
     expect(keys(s)).toEqual(['wo-5', 'wo-6'])
     expect(s.active).toBe('wo-6')
     expect(s.editors[1].draft.parts).toEqual([]) // keeps the open draft
@@ -23,7 +23,7 @@ describe('open work order editors', () => {
   })
 
   it('shows a neighbor when the shown editor closes, then the list', () => {
-    let s = run({ type: 'openNew', draft: wo(0) }, { type: 'openNew', draft: wo(0) }, { type: 'open', workOrder: wo(9), activate: true }, { type: 'activate', key: 'new-2' })
+    let s = run({ type: 'openNew', draft: wo(0) }, { type: 'openNew', draft: wo(0) }, { type: 'open', doc: wo(9), activate: true }, { type: 'activate', key: 'new-2' })
     s = editorsReducer(s, { type: 'close', key: 'new-2' })
     expect(s.active).toBe('wo-9')
     s = editorsReducer(s, { type: 'close', key: 'wo-9' })
@@ -67,7 +67,7 @@ describe('undo and redo', () => {
 
 describe('unsaved changes and saving', () => {
   it('ignores edits that change nothing and tracks changes against what’s saved', () => {
-    let s = run({ type: 'open', workOrder: wo(3), activate: true })
+    let s = run({ type: 'open', doc: wo(3), activate: true })
     const before = s.editors[0]
     s = editorsReducer(s, { type: 'edit', key: 'wo-3', update: (d) => d, record: true })
     expect(s.editors[0]).toBe(before)
@@ -80,7 +80,7 @@ describe('unsaved changes and saving', () => {
 
   it('re-keys a new work order once saved, with the stored line ids', () => {
     let s = run({ type: 'openNew', draft: wo(0) }, { type: 'edit', key: 'new-1', update: (d) => ({ ...d, parts: [emptyPart()] }), record: true })
-    s = editorsReducer(s, { type: 'saved', key: 'new-1', workOrder: { ...s.editors[0].draft, id: 12, parts: [{ ...emptyPart(), id: 40 }] } })
+    s = editorsReducer(s, { type: 'saved', key: 'new-1', doc: { ...s.editors[0].draft, id: 12, parts: [{ ...emptyPart(), id: 40 }] } })
     expect(keys(s)).toEqual(['wo-12'])
     expect(s.active).toBe('wo-12')
     expect(isDirty(s.editors[0])).toBe(false)
@@ -90,9 +90,9 @@ describe('unsaved changes and saving', () => {
 
 describe('voided work orders', () => {
   it('can’t be changed, even by undo; reloading replaces the draft and history', () => {
-    let s = run({ type: 'open', workOrder: wo(4), activate: true }, { type: 'edit', key: 'wo-4', update: (d) => ({ ...d, parts: [emptyPart()] }), record: true }, { type: 'saved', key: 'wo-4', workOrder: { ...wo(4), parts: [emptyPart()] } })
+    let s = run({ type: 'open', doc: wo(4), activate: true }, { type: 'edit', key: 'wo-4', update: (d) => ({ ...d, parts: [emptyPart()] }), record: true }, { type: 'saved', key: 'wo-4', doc: { ...wo(4), parts: [emptyPart()] } })
     const voided = { ...s.editors[0].draft, dateVoided: '2026-02-01' }
-    s = editorsReducer(s, { type: 'reload', workOrder: voided })
+    s = editorsReducer(s, { type: 'reload', doc: voided })
     expect(s.editors[0]).toMatchObject({ draft: voided, baseline: voided, past: [], future: [] })
     for (const action of [
       { type: 'edit', key: 'wo-4', update: (d: WorkOrder) => ({ ...d, labor: [emptyLabor(90)] }), record: true },
@@ -102,6 +102,6 @@ describe('voided work orders', () => {
     }
     expect(isDirty(s.editors[0])).toBe(false)
     // Reloading a work order that isn't open does nothing.
-    expect(editorsReducer(s, { type: 'reload', workOrder: wo(77) })).toEqual(s)
+    expect(editorsReducer(s, { type: 'reload', doc: wo(77) })).toEqual(s)
   })
 })

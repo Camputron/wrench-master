@@ -65,7 +65,7 @@ test('builds, totals, and saves a work order', async ({ page, menu }) => {
   await dialog.getByRole('button', { name: 'Add payment' }).click()
   await expect.poll(() => totals(page)).toMatch(/Balance due\s+\$0\.00/)
 
-  await menu('Save Work Order')
+  await menu('Save')
   await expect(page.getByRole('heading', { name: 'Work order #4' })).toBeVisible()
   await expect(page.locator('main header').getByText('Unsaved changes')).toBeHidden()
 

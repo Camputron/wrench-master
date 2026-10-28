@@ -3,16 +3,18 @@ import { mkdirSync } from 'fs'
 import { listBackups } from './backups'
 import { chooseBackupFolder, restoreFromBackup } from './restoreBackup'
 import type { ApiHandlers } from '../shared/api'
-import type { WorkOrder } from '../shared/types'
+import type { Estimate, WorkOrder } from '../shared/types'
 import type { Services } from './services'
-import { invoiceHtml } from './invoice'
-import { printInvoice, saveInvoicePdf } from './printing'
+import { estimateFileName, estimateHtml, invoiceFileName, invoiceHtml } from './invoice'
+import { printPage, savePagePdf, type Printable } from './printing'
 import { decodeVin } from './vin'
 
 export function createHandlers(services: Services): ApiHandlers {
   // Read repos on every call: importing a database replaces them.
   const db = (): Services['repos'] => services.repos
   const { settings, session } = services
+  const invoice = (wo: WorkOrder): Printable => ({ html: invoiceHtml(wo, settings.get()), fileName: invoiceFileName(wo), noun: 'invoice' })
+  const estimate = (e: Estimate): Printable => ({ html: estimateHtml(e, settings.get()), fileName: estimateFileName(e), noun: 'estimate' })
   return {
     customers: {
       get: (id) => db().customers.getById(id),
@@ -60,6 +62,26 @@ export function createHandlers(services: Services): ApiHandlers {
       years: () => db().workOrders.years(),
       incomeByMonth: (year) => db().workOrders.incomeByMonth(year)
     },
+    estimates: {
+      get: (id) => db().estimates.getById(id),
+      getByIds: (ids) => db().estimates.getByIds(ids),
+      filter: (f) => db().estimates.filter(f),
+      listByCustomer: (customerId) => db().estimates.listByCustomer(customerId),
+      save: (e) => db().estimates.save(e),
+      delete: (id): void => {
+        db().estimates.delete(id)
+        session.forgetEstimate(id)
+      },
+      setStatus: (id, status) => db().estimates.setStatus(id, status === 'declined' ? 'declined' : 'open'),
+      convert: (id): WorkOrder => {
+        const workOrder = db().estimates.convert(id)
+        session.addRecent(workOrder.id)
+        return workOrder
+      },
+      html: (e) => estimateHtml(e, settings.get()),
+      print: (e) => printPage(estimate(e)),
+      savePdf: (e) => savePagePdf(BrowserWindow.getFocusedWindow(), estimate(e))
+    },
     settings: {
       get: () => settings.get(),
       update: (patch) => settings.update(patch)
@@ -67,12 +89,14 @@ export function createHandlers(services: Services): ApiHandlers {
     session: {
       recentWorkOrders: () => db().workOrders.getByIds(session.recentWorkOrderIds()),
       openWorkOrderIds: () => session.openWorkOrderIds(),
-      setOpenWorkOrderIds: (ids) => session.setOpen(ids)
+      setOpenWorkOrderIds: (ids) => session.setOpen(ids),
+      openEstimateIds: () => session.openEstimateIds(),
+      setOpenEstimateIds: (ids) => session.setOpenEstimates(ids)
     },
     invoices: {
       html: (wo) => invoiceHtml(wo, settings.get()),
-      print: (wo) => printInvoice(wo, settings.get()),
-      savePdf: (wo) => saveInvoicePdf(BrowserWindow.getFocusedWindow(), wo, settings.get())
+      print: (wo) => printPage(invoice(wo)),
+      savePdf: (wo) => savePagePdf(BrowserWindow.getFocusedWindow(), invoice(wo))
     },
     backups: {
       status: () => {
@@ -102,8 +126,8 @@ export function createHandlers(services: Services): ApiHandlers {
         node: process.versions.node,
         databasePath: services.databasePath
       }),
-      setUnsavedChanges: (count) => {
-        services.unsavedChanges = Number.isInteger(count) && count > 0 ? count : 0
+      setUnsavedChanges: (kind, count) => {
+        if (kind === 'workOrder' || kind === 'estimate') services.unsaved[kind] = Number.isInteger(count) && count > 0 ? count : 0
       }
     }
   }

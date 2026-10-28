@@ -94,6 +94,34 @@ export interface WorkOrder {
   payments: Payment[]
 }
 
+/** Open while it's being quoted; accepted once turned into a work order (then read-only); or declined. */
+export type EstimateStatus = 'open' | 'accepted' | 'declined'
+
+/** A quote for a job, printed for the customer to approve before work starts. Numbered separately (E-00012). */
+export interface Estimate {
+  id: number
+  dateCreated: IsoDate
+  /** The quoted prices hold until this date. */
+  validUntil: IsoDate
+  customer: Customer
+  /** `mileageOut` is unused. */
+  vehicle: WorkOrderVehicle
+  taxRate: number
+  parts: AutoPart[]
+  labor: Labor[]
+  status: EstimateStatus
+  /** The work order it was turned into, once accepted. */
+  workOrderId: number | null
+}
+
+export interface EstimateFilter {
+  /** Same as WorkOrderFilter.text; numbers match the estimate number ("12", "E-12", "E12"). */
+  text?: string
+  /** 'expired' is open and past its valid-until date. */
+  status?: EstimateStatus | 'expired'
+  limit?: number
+}
+
 /** An entry in the auto part catalog (`item` table) used for autocomplete. */
 export type PartSuggestion = Omit<AutoPart, 'id'>
 
@@ -191,17 +219,21 @@ export interface Settings {
 
 export type SettingsPatch = Partial<Omit<Settings, 'shop'>> & { shop?: Partial<ShopInfo> }
 
-export type Page = 'dashboard' | 'customers' | 'workOrders'
+/** The two kinds of document with editors: work orders and estimates. */
+export type DocumentKind = 'workOrder' | 'estimate'
+
+export type Page = 'dashboard' | 'customers' | 'workOrders' | 'estimates'
 
 /** Native menu commands the renderer handles. */
 export type MenuAction =
   | { type: 'navigate'; page: Page }
   | { type: 'newCustomer' }
   | { type: 'newWorkOrder' }
+  | { type: 'newEstimate' }
   | { type: 'save' }
   | { type: 'print' }
-  /** File > Close Work Order: closes the work order on screen; on macOS, closes the window when there isn't one. */
-  | { type: 'closeWorkOrder' }
+  /** File > Close Tab: closes the work order or estimate on screen; on macOS, closes the window when there isn't one. */
+  | { type: 'closeTab' }
   /** Edit > Find: jumps to the search field of the customer or work order list. */
   | { type: 'find' }
   /** Edit > Undo/Redo: the renderer undoes typing in a text field, or the last work order change otherwise. */

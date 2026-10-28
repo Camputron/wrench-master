@@ -3,13 +3,14 @@ import { JsonFile } from './jsonFile'
 interface SessionData {
   recentWorkOrderIds: number[]
   openWorkOrderIds: number[]
+  openEstimateIds: number[]
 }
 
 const MAX_RECENT = 10
 
 const ids = (value: unknown): number[] => (Array.isArray(value) ? value.filter((v): v is number => Number.isInteger(v) && v > 0) : [])
 
-/** App state that survives restarts: recently saved and currently open work orders. */
+/** App state that survives restarts: recently saved and currently open work orders, and open estimates. */
 export class SessionStore {
   private file: JsonFile<SessionData>
   private data: SessionData
@@ -17,7 +18,7 @@ export class SessionStore {
   constructor(path: string) {
     this.file = new JsonFile(path)
     const saved = this.file.read()
-    this.data = { recentWorkOrderIds: ids(saved?.recentWorkOrderIds), openWorkOrderIds: ids(saved?.openWorkOrderIds) }
+    this.data = { recentWorkOrderIds: ids(saved?.recentWorkOrderIds), openWorkOrderIds: ids(saved?.openWorkOrderIds), openEstimateIds: ids(saved?.openEstimateIds) }
   }
 
   recentWorkOrderIds(): number[] {
@@ -26,6 +27,21 @@ export class SessionStore {
 
   openWorkOrderIds(): number[] {
     return this.data.openWorkOrderIds
+  }
+
+  openEstimateIds(): number[] {
+    return this.data.openEstimateIds
+  }
+
+  setOpenEstimates(openIds: number[]): void {
+    this.data.openEstimateIds = [...new Set(ids(openIds))]
+    this.save()
+  }
+
+  /** Forgets a deleted estimate. */
+  forgetEstimate(id: number): void {
+    this.data.openEstimateIds = this.data.openEstimateIds.filter((x) => x !== id)
+    this.save()
   }
 
   /** Moves the work order to the front of the recent list. */
@@ -48,7 +64,7 @@ export class SessionStore {
 
   /** Clears everything, e.g. after the database is replaced and old ids no longer apply. */
   clear(): void {
-    this.data = { recentWorkOrderIds: [], openWorkOrderIds: [] }
+    this.data = { recentWorkOrderIds: [], openWorkOrderIds: [], openEstimateIds: [] }
     this.save()
   }
 

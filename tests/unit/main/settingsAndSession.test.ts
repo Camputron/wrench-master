@@ -65,6 +65,18 @@ describe('session', () => {
     expect(s.openWorkOrderIds()).toEqual([])
   })
 
+  it('remembers open estimates separately, and forgets deleted ones', () => {
+    const file = join(tempDir(), 'session.json')
+    const s = new SessionStore(file)
+    s.setOpen([3])
+    s.setOpenEstimates([7, 7, 8])
+    expect(new SessionStore(file).openEstimateIds()).toEqual([7, 8])
+    s.forgetEstimate(7)
+    expect([s.openWorkOrderIds(), s.openEstimateIds()]).toEqual([[3], [8]])
+    s.clear()
+    expect(s.openEstimateIds()).toEqual([])
+  })
+
   it('ignores junk in the file', () => {
     const file = join(tempDir(), 'session.json')
     writeFileSync(file, JSON.stringify({ recentWorkOrderIds: ['x', 3, -1, 2.5], openWorkOrderIds: 'nope' }))

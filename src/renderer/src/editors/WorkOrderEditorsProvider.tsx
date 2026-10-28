@@ -1,24 +1,10 @@
-import { useQueryClient } from '@tanstack/react-query'
-import { useCallback, useEffect, useMemo, useReducer, useRef, type ReactNode } from 'react'
-import type { Vehicle, WorkOrderVehicle } from '../../../shared/types'
+import { useMemo, type ReactNode } from 'react'
 import { todayIso } from '../lib/format'
 import { keys } from '../lib/queryClient'
-import { emptyWorkOrder } from '../lib/records'
+import { emptyWorkOrder, toWorkOrderVehicle } from '../lib/records'
 import { EditorsContext, type EditorsApi } from './editorsContext'
-import { editorsReducer, initialEditorsState, isDirty, keyFor } from './editorsReducer'
-
-const toWorkOrderVehicle = ({ vin, year, make, model, licensePlate, color, engine, transmission }: Vehicle): WorkOrderVehicle => ({
-  vin,
-  year,
-  make,
-  model,
-  licensePlate,
-  color,
-  engine,
-  transmission,
-  mileageIn: '',
-  mileageOut: ''
-})
+import { workOrderEditors } from './editorsReducer'
+import { useDocumentEditors } from './useDocumentEditors'
 
 interface Props {
   /** Tax rate for new work orders, from settings. */
@@ -28,91 +14,34 @@ interface Props {
   children: ReactNode
 }
 
-/**
- * Keeps open work order editors (and their unsaved drafts) for the whole app, so switching pages doesn't
- * lose work. Reopens the work orders that were open last time, and keeps the main process informed about
- * unsaved changes so quitting can warn.
- */
+/** Open work order editors for the whole app (see useDocumentEditors). */
 export default function WorkOrderEditorsProvider({ defaultTaxRate, onShow, children }: Props): React.ReactElement {
-  const queryClient = useQueryClient()
-  const [state, dispatch] = useReducer(editorsReducer, initialEditorsState)
-  const editorsRef = useRef(state.editors)
-  useEffect(() => {
-    editorsRef.current = state.editors
+  const editors = useDocumentEditors({
+    kind: 'workOrder',
+    noun: 'work order',
+    editors: workOrderEditors,
+    get: (id) => window.api.workOrders.get(id),
+    getByIds: (ids) => window.api.workOrders.getByIds(ids),
+    store: (wo) => window.api.workOrders.save(wo),
+    openIds: () => window.api.session.openWorkOrderIds(),
+    setOpenIds: (ids) => window.api.session.setOpenWorkOrderIds(ids),
+    // Lists, customer pages, and the dashboard all show work orders.
+    queryKey: keys.workOrders,
+    onShow
   })
-
-  // Reopen the work orders that were open when the app was last closed.
-  const restoredRef = useRef(false)
-  useEffect(() => {
-    if (restoredRef.current) return
-    restoredRef.current = true
-    void (async () => {
-      const ids = await window.api.session.openWorkOrderIds()
-      const workOrders = ids.length ? await window.api.workOrders.getByIds(ids) : []
-      for (const workOrder of workOrders) dispatch({ type: 'open', workOrder, activate: false })
-    })()
-  }, [])
-
-  // Remember which saved work orders are open.
-  const openIds = state.editors.filter((e) => e.key.startsWith('wo-')).map((e) => e.draft.id)
-  const openIdsKey = openIds.join(',')
-  useEffect(() => {
-    if (restoredRef.current) void window.api.session.setOpenWorkOrderIds(openIdsKey ? openIdsKey.split(',').map(Number) : [])
-  }, [openIdsKey])
-
-  const dirtyCount = state.editors.filter(isDirty).length
-  useEffect(() => {
-    void window.api.app.setUnsavedChanges(dirtyCount)
-  }, [dirtyCount])
-
-  const openWorkOrder = useCallback(
-    async (id: number) => {
-      onShow()
-      if (editorsRef.current.some((e) => e.key === keyFor(id))) {
-        dispatch({ type: 'activate', key: keyFor(id) })
-        return
-      }
-      const workOrder = await window.api.workOrders.get(id)
-      if (workOrder) dispatch({ type: 'open', workOrder, activate: true })
-    },
-    [onShow]
-  )
-
-  const save = useCallback(
-    async (key: string) => {
-      const editor = editorsRef.current.find((e) => e.key === key)
-      if (!editor) throw new Error('This work order is no longer open.')
-      const stored = await window.api.workOrders.save(editor.draft)
-      dispatch({ type: 'saved', key, workOrder: stored })
-      // Lists, customer pages, and the dashboard all show work orders.
-      await queryClient.invalidateQueries({ queryKey: keys.workOrders })
-      return stored
-    },
-    [queryClient]
-  )
 
   const api = useMemo<EditorsApi>(
     () => ({
-      editors: state.editors,
-      active: state.editors.find((e) => e.key === state.active) ?? null,
-      showList: () => dispatch({ type: 'activate', key: null }),
-      show: (key) => dispatch({ type: 'activate', key }),
-      openWorkOrder,
+      ...editors,
+      openWorkOrder: editors.open,
       newWorkOrder: (prefill) => {
         const draft = emptyWorkOrder(defaultTaxRate, todayIso())
         if (prefill?.customer) draft.customer = prefill.customer
         if (prefill?.vehicle) draft.vehicle = toWorkOrderVehicle(prefill.vehicle)
-        dispatch({ type: 'openNew', draft })
-        onShow()
-      },
-      edit: (key, update, record = false) => dispatch({ type: 'edit', key, update, record }),
-      undo: (key) => dispatch({ type: 'undo', key }),
-      redo: (key) => dispatch({ type: 'redo', key }),
-      save,
-      reload: (workOrder) => dispatch({ type: 'reload', workOrder }),
-      close: (key) => dispatch({ type: 'close', key })
+        editors.openNew(draft)
+      }
     }),
-    [state, openWorkOrder, save, defaultTaxRate, onShow]
+    [editors, defaultTaxRate]
   )
 
   return <EditorsContext value={api}>{children}</EditorsContext>

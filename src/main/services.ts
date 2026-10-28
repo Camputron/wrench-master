@@ -3,7 +3,7 @@ import { BrowserWindow } from 'electron'
 import { copyFileSync, rmSync } from 'fs'
 import { join } from 'path'
 import { EVENT_CHANNEL_PREFIX, type AppEvents } from '../shared/api'
-import type { Settings } from '../shared/types'
+import type { DocumentKind, Settings } from '../shared/types'
 import { backUpDatabase, isBackupDue, type BackupKind } from './backups'
 import { createRepos, type Repos } from './db'
 import { SessionStore } from './session'
@@ -21,8 +21,8 @@ export class Services {
   readonly session: SessionStore
   /** Replaced when a database is imported, so always read it through this property. */
   repos: Repos
-  /** Open work orders with unsaved changes, as reported by the renderer. */
-  unsavedChanges = 0
+  /** Open work orders and estimates with unsaved changes, as reported by the renderer. */
+  readonly unsaved: Record<DocumentKind, number> = { workOrder: 0, estimate: 0 }
   private autoBackupTimer: NodeJS.Timeout | undefined
 
   constructor(
@@ -33,6 +33,20 @@ export class Services {
     this.repos = createRepos(this.databasePath)
     this.settings = new SettingsStore(join(dataDir, 'settings.json'), onSettingsChange)
     this.session = new SessionStore(join(dataDir, 'session.json'))
+  }
+
+  /** How many open documents have unsaved changes. */
+  get unsavedChanges(): number {
+    return this.unsaved.workOrder + this.unsaved.estimate
+  }
+
+  /** e.g. "A work order", "2 work orders and an estimate"; null when nothing is unsaved. */
+  describeUnsaved(): string | null {
+    const { workOrder: w, estimate: e } = this.unsaved
+    const parts = [w === 1 ? 'a work order' : w > 1 ? `${w} work orders` : '', e === 1 ? 'an estimate' : e > 1 ? `${e} estimates` : ''].filter(Boolean)
+    if (parts.length === 0) return null
+    const text = parts.join(' and ')
+    return text[0].toUpperCase() + text.slice(1)
   }
 
   /** Where backups go: the folder chosen in Preferences, or Backups next to the database. */

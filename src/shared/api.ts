@@ -16,7 +16,10 @@ import type {
   VinDecodeResult,
   WorkOrderFilter,
   WorkOrderStats,
-  BackupStatus
+  BackupStatus,
+  DocumentKind,
+  Estimate,
+  EstimateFilter
 } from './types'
 
 /**
@@ -70,6 +73,26 @@ export interface Api {
     years(): Promise<number[]>
     incomeByMonth(year: number): Promise<MonthlyIncome[]>
   }
+  estimates: {
+    get(id: number): Promise<Estimate | null>
+    getByIds(ids: number[]): Promise<Estimate[]>
+    filter(filter: EstimateFilter): Promise<Estimate[]>
+    listByCustomer(customerId: number): Promise<Estimate[]>
+    /** Inserts or updates, including parts and labor. Refuses accepted estimates. Resolves to the stored estimate. */
+    save(estimate: Estimate): Promise<Estimate>
+    /** Refuses accepted estimates, which are kept as the record of the quote. */
+    delete(id: number): Promise<void>
+    /** Declines an open estimate or reopens a declined one. */
+    setStatus(id: number, status: 'open' | 'declined'): Promise<Estimate | null>
+    /** Accepts an open estimate: creates a work order from it and links them. Resolves to the new work order. */
+    convert(id: number): Promise<WorkOrder>
+    /** The printable estimate (saved or not) as a complete HTML page. */
+    html(estimate: Estimate): Promise<string>
+    /** Opens the system print dialog. Resolves to false if cancelled. */
+    print(estimate: Estimate): Promise<boolean>
+    /** Asks where to save, then writes a PDF. Resolves to its path, or null if cancelled. */
+    savePdf(estimate: Estimate): Promise<string | null>
+  }
   settings: {
     get(): Promise<Settings>
     /** Merges the patch into the saved settings. Invalid values are ignored. Resolves to the new settings. */
@@ -81,6 +104,9 @@ export interface Api {
     /** Work orders that were open in the editor, to reopen on launch. */
     openWorkOrderIds(): Promise<number[]>
     setOpenWorkOrderIds(ids: number[]): Promise<void>
+    /** Estimates that were open in the editor, to reopen on launch. */
+    openEstimateIds(): Promise<number[]>
+    setOpenEstimateIds(ids: number[]): Promise<void>
   }
   invoices: {
     /** The printable invoice for a work order (saved or not) as a complete HTML page. */
@@ -106,8 +132,8 @@ export interface Api {
     info(): Promise<AppInfo>
     /** Reveals a file in Finder / Explorer. */
     showItemInFolder(path: string): Promise<void>
-    /** Tells the main process how many open work orders have unsaved changes, so quitting can warn. */
-    setUnsavedChanges(count: number): Promise<void>
+    /** Tells the main process how many open work orders (or estimates) have unsaved changes, so quitting can warn. */
+    setUnsavedChanges(kind: DocumentKind, count: number): Promise<void>
   }
 }
 
@@ -149,8 +175,9 @@ export const API_METHODS: { [N in keyof Api]: Record<keyof Api[N], true> } = {
     years: true,
     incomeByMonth: true
   },
+  estimates: { get: true, getByIds: true, filter: true, listByCustomer: true, save: true, delete: true, setStatus: true, convert: true, html: true, print: true, savePdf: true },
   settings: { get: true, update: true },
-  session: { recentWorkOrders: true, openWorkOrderIds: true, setOpenWorkOrderIds: true },
+  session: { recentWorkOrders: true, openWorkOrderIds: true, setOpenWorkOrderIds: true, openEstimateIds: true, setOpenEstimateIds: true },
   invoices: { html: true, print: true, savePdf: true },
   backups: { status: true, backUpNow: true, chooseFolder: true, showFolder: true, restore: true },
   app: { info: true, showItemInFolder: true, setUnsavedChanges: true }

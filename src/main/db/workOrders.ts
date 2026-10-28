@@ -1,48 +1,24 @@
 import type { Database } from 'better-sqlite3'
 import { bill, billFromSums } from '../../shared/billing'
-import { PAYMENT_METHODS, type AutoPart, type Labor, type MonthlyIncome, type Payment, type PaymentMethod, type WorkOrder, type WorkOrderFilter, type WorkOrderStats } from '../../shared/types'
-import { dbDatePlusDays, fromDbDate, likeEscape, prefixMatches, str, toDbBool, toDbDate, today } from './sql'
+import { PAYMENT_METHODS, type MonthlyIncome, type Payment, type PaymentMethod, type WorkOrder, type WorkOrderFilter, type WorkOrderStats } from '../../shared/types'
+import { childRows, LABOR_COLUMNS, laborValues, PART_COLUMNS, partValues, snapshotParams, SNAPSHOT_COLUMNS, syncLines, textSearch, toLabor, toPart, toSnapshot, type LineTable, type Row } from './documents'
+import { dbDatePlusDays, fromDbDate, prefixMatches, str, toDbDate, today } from './sql'
 
-type Row = Record<string, unknown>
-
-const HEADER_COLUMNS = `work_order_id, date_created, date_completed, customer_id,
-  customer_first_name, customer_last_name, customer_phone, customer_email, customer_company,
-  customer_address, customer_city, customer_state, customer_zip,
-  vehicle_vin, vehicle_year, vehicle_make, vehicle_model, vehicle_license_plate, vehicle_color,
-  vehicle_engine, vehicle_transmission, vehicle_mileage_in, vehicle_mileage_out, tax_rate`
+const HEADER_COLUMNS = `work_order_id, date_created, date_completed, ${SNAPSHOT_COLUMNS}, tax_rate`
 
 /** SQL condition: the work order (`work_order_id` in scope) hasn't been voided. */
 const NOT_VOIDED = 'work_order_id not in (select work_order_id from work_order_void)'
+
+const PARTS: LineTable = { table: 'work_order_item', idColumn: 'work_order_item_id', parentColumn: 'work_order_id' }
+const LABOR: LineTable = { table: 'work_order_labor', idColumn: 'work_order_labor_id', parentColumn: 'work_order_id' }
+const PAYMENTS: LineTable = { table: 'work_order_payment', idColumn: 'work_order_payment_id', parentColumn: 'work_order_id' }
 
 function toWorkOrder(r: Row): WorkOrder {
   return {
     id: Number(r.work_order_id),
     dateCreated: fromDbDate(r.date_created) ?? today(),
     dateCompleted: fromDbDate(r.date_completed),
-    customer: {
-      id: Number(r.customer_id ?? 0),
-      firstName: str(r.customer_first_name),
-      lastName: str(r.customer_last_name),
-      phone: str(r.customer_phone),
-      email: str(r.customer_email),
-      company: str(r.customer_company),
-      street: str(r.customer_address),
-      city: str(r.customer_city),
-      state: str(r.customer_state),
-      zip: str(r.customer_zip)
-    },
-    vehicle: {
-      vin: str(r.vehicle_vin),
-      year: str(r.vehicle_year),
-      make: str(r.vehicle_make),
-      model: str(r.vehicle_model),
-      licensePlate: str(r.vehicle_license_plate),
-      color: str(r.vehicle_color),
-      engine: str(r.vehicle_engine),
-      transmission: str(r.vehicle_transmission),
-      mileageIn: str(r.vehicle_mileage_in),
-      mileageOut: str(r.vehicle_mileage_out)
-    },
+    ...toSnapshot(r),
     taxRate: Number(r.tax_rate ?? 0),
     dateVoided: fromDbDate(r.date_voided),
     parts: [],
@@ -52,52 +28,8 @@ function toWorkOrder(r: Row): WorkOrder {
 }
 
 function headerParams(wo: WorkOrder): unknown[] {
-  const { customer: c, vehicle: v } = wo
-  return [
-    toDbDate(wo.dateCreated),
-    wo.dateCompleted ? toDbDate(wo.dateCompleted) : null,
-    c.id,
-    c.firstName,
-    c.lastName,
-    c.phone,
-    c.email,
-    c.company,
-    c.street,
-    c.city,
-    c.state,
-    c.zip,
-    v.vin,
-    v.year,
-    v.make,
-    v.model,
-    v.licensePlate,
-    v.color,
-    v.engine,
-    v.transmission,
-    v.mileageIn,
-    v.mileageOut,
-    wo.taxRate
-  ]
+  return [toDbDate(wo.dateCreated), wo.dateCompleted ? toDbDate(wo.dateCompleted) : null, ...snapshotParams(wo.customer, wo.vehicle), wo.taxRate]
 }
-
-const toPart = (r: Row): AutoPart => ({
-  id: Number(r.work_order_item_id),
-  name: str(r.item_name),
-  desc: str(r.item_desc),
-  retailPrice: Number(r.item_retail_price ?? 0),
-  listPrice: Number(r.item_list_price ?? 0),
-  quantity: Number(r.item_quantity ?? 0),
-  taxable: Boolean(r.item_taxable)
-})
-
-const toLabor = (r: Row): Labor => ({
-  id: Number(r.work_order_labor_id),
-  code: str(r.labor_code),
-  desc: str(r.labor_desc),
-  billedHrs: Number(r.labor_billed_hrs ?? 0),
-  rate: Number(r.labor_rate ?? 0),
-  taxable: Boolean(r.labor_taxable)
-})
 
 const toPayment = (r: Row): Payment => {
   const type = str(r.type).trim()
@@ -122,12 +54,10 @@ export class WorkOrderRepo {
     if (orders.length === 0) return orders
 
     const byId = new Map(orders.map((wo) => [wo.id, wo]))
-    const ids = JSON.stringify(orders.map((wo) => wo.id))
-    const children = (table: string, idColumn: string): Row[] => this.db.prepare(`select * from ${table} where work_order_id in (select value from json_each(?)) order by ${idColumn}`).all(ids) as Row[]
-
-    for (const r of children('work_order_item', 'work_order_item_id')) byId.get(Number(r.work_order_id))?.parts.push(toPart(r))
-    for (const r of children('work_order_labor', 'work_order_labor_id')) byId.get(Number(r.work_order_id))?.labor.push(toLabor(r))
-    for (const r of children('work_order_payment', 'work_order_payment_id')) byId.get(Number(r.work_order_id))?.payments.push(toPayment(r))
+    const ids = orders.map((wo) => wo.id)
+    for (const r of childRows(this.db, PARTS, ids)) byId.get(Number(r.work_order_id))?.parts.push(toPart(r, PARTS.idColumn))
+    for (const r of childRows(this.db, LABOR, ids)) byId.get(Number(r.work_order_id))?.labor.push(toLabor(r, LABOR.idColumn))
+    for (const r of childRows(this.db, PAYMENTS, ids)) byId.get(Number(r.work_order_id))?.payments.push(toPayment(r))
     return orders
   }
 
@@ -165,14 +95,9 @@ export class WorkOrderRepo {
       ['vehicle_model', f.model]
     ])
     const args: unknown[] = params
-    for (const word of (f.text ?? '').trim().split(/\s+/).filter(Boolean)) {
-      const prefix = likeEscape(word) + '%'
-      const columns = ['customer_first_name', 'customer_last_name', 'customer_company', 'vehicle_year', 'vehicle_make', 'vehicle_model', 'vehicle_license_plate', 'vehicle_vin']
-      const id = /^#?\d+$/.test(word) ? Number(word.replace('#', '')) : null
-      clauses.push(`(${columns.map((c) => `${c} like ? escape '\\'`).join(' or ')}${id !== null ? ' or work_order_id = ?' : ''})`)
-      args.push(...columns.map(() => prefix))
-      if (id !== null) args.push(id)
-    }
+    const search = textSearch(f.text, 'work_order_id', /^#?(\d+)$/)
+    clauses.push(...search.clauses)
+    args.push(...search.params)
     if (f.status === 'open') clauses.push(`date_completed is null and ${NOT_VOIDED}`)
     if (f.status === 'completed') clauses.push(`date_completed is not null and ${NOT_VOIDED}`)
     if (f.status === 'voided') clauses.push('date_voided is not null')
@@ -232,35 +157,12 @@ export class WorkOrderRepo {
           .run(...headerParams(wo), id)
       }
 
-      this.syncLines(id, 'work_order_item', 'work_order_item_id', wo.parts, {
-        insert: 'insert into work_order_item (item_name, item_desc, item_retail_price, item_list_price, item_quantity, item_taxable, work_order_id) values (?, ?, ?, ?, ?, ?, ?)',
-        update: 'update work_order_item set item_name = ?, item_desc = ?, item_retail_price = ?, item_list_price = ?, item_quantity = ?, item_taxable = ? where work_order_id = ? and work_order_item_id = ?',
-        params: (p) => [p.name, p.desc, p.retailPrice, p.listPrice, p.quantity, toDbBool(p.taxable)]
-      })
-      this.syncLines(id, 'work_order_labor', 'work_order_labor_id', wo.labor, {
-        insert: 'insert into work_order_labor (labor_code, labor_desc, labor_billed_hrs, labor_rate, labor_taxable, work_order_id) values (?, ?, ?, ?, ?, ?)',
-        update: 'update work_order_labor set labor_code = ?, labor_desc = ?, labor_billed_hrs = ?, labor_rate = ?, labor_taxable = ? where work_order_id = ? and work_order_labor_id = ?',
-        params: (l) => [l.code, l.desc, l.billedHrs, l.rate, toDbBool(l.taxable)]
-      })
-      this.syncLines(id, 'work_order_payment', 'work_order_payment_id', wo.payments, {
-        insert: 'insert into work_order_payment (date_of_payment, type, amount, work_order_id) values (?, ?, ?, ?)',
-        update: 'update work_order_payment set date_of_payment = ?, type = ?, amount = ? where work_order_id = ? and work_order_payment_id = ?',
-        params: (p) => [toDbDate(p.date), p.method, p.amount]
-      })
+      syncLines(this.db, PARTS, id, wo.parts, PART_COLUMNS, partValues)
+      syncLines(this.db, LABOR, id, wo.labor, LABOR_COLUMNS, laborValues)
+      syncLines(this.db, PAYMENTS, id, wo.payments, ['date_of_payment', 'type', 'amount'], (p) => [toDbDate(p.date), p.method, p.amount])
       return id
     })()
     return this.getById(id) as WorkOrder
-  }
-
-  private syncLines<T extends { id: number }>(workOrderId: number, table: string, idColumn: string, lines: T[], sql: { insert: string; update: string; params: (line: T) => unknown[] }): void {
-    const keep = lines.filter((l) => l.id > 0).map((l) => l.id)
-    this.db.prepare(`delete from ${table} where work_order_id = ? and ${idColumn} not in (select value from json_each(?))`).run(workOrderId, JSON.stringify(keep))
-    const insert = this.db.prepare(sql.insert)
-    const update = this.db.prepare(sql.update)
-    for (const line of lines) {
-      if (line.id > 0) update.run(...sql.params(line), workOrderId, line.id)
-      else insert.run(...sql.params(line), workOrderId)
-    }
   }
 
   /** Voids the work order (or restores it, with `voided` false). Returns it as stored. */

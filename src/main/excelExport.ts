@@ -1,6 +1,7 @@
 import ExcelJS from 'exceljs'
 import { balance, bill, laborSubtotal, partSubtotal, tax, totalPayments } from '../shared/billing'
 import { stateByKey } from '../shared/states'
+import { estimateNumber, isExpired } from '../shared/estimates'
 import type { WorkOrder } from '../shared/types'
 import type { Repos } from './db'
 
@@ -9,12 +10,13 @@ import type { Repos } from './db'
  * readable headers, real dates and money formats, and include each work order's totals.
  */
 
-export type ExportKind = 'customers' | 'vehicles' | 'workOrders' | 'parts'
+export type ExportKind = 'customers' | 'vehicles' | 'workOrders' | 'estimates' | 'parts'
 
 export const EXPORT_FILE_NAMES: Record<ExportKind, string> = {
   customers: 'customers.xlsx',
   vehicles: 'vehicles.xlsx',
   workOrders: 'work-orders.xlsx',
+  estimates: 'estimates.xlsx',
   parts: 'parts-catalog.xlsx'
 }
 
@@ -175,6 +177,44 @@ export async function exportToExcel(kind: ExportKind, repos: Repos, path: string
         { header: 'Amount', key: 'amount', width: 12, format: 'money' }
       ],
       workOrders.flatMap((wo) => wo.payments.map((p) => ({ workOrder: wo.id, date: excelDate(p.date), method: p.method, amount: p.amount })))
+    )
+  }
+
+  if (kind === 'estimates') {
+    const estimates = repos.estimates.list()
+    count = estimates.length
+    const todayIso = new Date().toLocaleDateString('en-CA') // YYYY-MM-DD, local time
+    addSheet(
+      book,
+      'Estimates',
+      [
+        { header: 'Estimate #', key: 'number', width: 12 },
+        { header: 'Created', key: 'created', width: 11, format: 'date' },
+        { header: 'Valid until', key: 'validUntil', width: 11, format: 'date' },
+        { header: 'Status', key: 'status', width: 10 },
+        { header: 'Work order #', key: 'workOrder', width: 12 },
+        { header: 'Customer', key: 'customer', width: 20 },
+        { header: 'Company', key: 'company', width: 20 },
+        { header: 'Phone', key: 'phone', width: 14 },
+        { header: 'Vehicle', key: 'vehicle', width: 24 },
+        { header: 'VIN', key: 'vin', width: 20 },
+        { header: 'Tax', key: 'tax', width: 11, format: 'money' },
+        { header: 'Total', key: 'total', width: 12, format: 'money' }
+      ],
+      estimates.map((e) => ({
+        number: estimateNumber(e.id),
+        created: excelDate(e.dateCreated),
+        validUntil: excelDate(e.validUntil),
+        status: isExpired(e, todayIso) ? 'Expired' : e.status[0].toUpperCase() + e.status.slice(1),
+        workOrder: e.workOrderId,
+        customer: name(e.customer.firstName, e.customer.lastName),
+        company: e.customer.company,
+        phone: e.customer.phone,
+        vehicle: [e.vehicle.year, e.vehicle.make, e.vehicle.model].filter(Boolean).join(' '),
+        vin: e.vehicle.vin,
+        tax: round(tax(e)),
+        total: round(bill(e))
+      }))
     )
   }
 

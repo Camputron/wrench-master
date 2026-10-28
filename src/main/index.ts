@@ -45,7 +45,7 @@ async function exportData(kind: ExportKind): Promise<void> {
   if (canceled || !filePath) return
   try {
     const count = await exportToExcel(kind, services.repos, filePath)
-    const what = { customers: 'customer', vehicles: 'vehicle', workOrders: 'work order', parts: 'catalog part' }[kind]
+    const what = { customers: 'customer', vehicles: 'vehicle', workOrders: 'work order', estimates: 'estimate', parts: 'catalog part' }[kind]
     emit('notice', { kind: 'success', message: `Exported ${count} ${what}${count === 1 ? '' : 's'}`, path: filePath })
   } catch (error) {
     emit('notice', { kind: 'error', message: `Export failed: ${error instanceof Error ? error.message : String(error)}` })
@@ -92,7 +92,7 @@ function createWindow(): void {
     event.preventDefault()
     const choice = dialog.showMessageBoxSync(mainWindow, {
       type: unsaved > 0 ? 'warning' : 'question',
-      message: unsaved > 0 ? `${unsaved === 1 ? 'A work order has' : `${unsaved} work orders have`} unsaved changes` : `Quit ${app.name}?`,
+      message: unsaved > 0 ? `${services.describeUnsaved()} ${unsaved === 1 ? 'has' : 'have'} unsaved changes` : `Quit ${app.name}?`,
       detail: unsaved > 0 ? 'If you quit now, those changes are lost.' : undefined,
       buttons: unsaved > 0 ? ['Quit Without Saving', 'Cancel'] : ['Quit', 'Cancel'],
       defaultId: unsaved > 0 ? 1 : 0,

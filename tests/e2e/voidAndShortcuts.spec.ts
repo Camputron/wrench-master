@@ -41,11 +41,11 @@ test('voids a paid work order instead of deleting it, and restores it', async ({
   await expect(page.locator('header').getByText(/^Completed/)).toBeVisible()
 })
 
-test('Close Work Order (Cmd/Ctrl+W) closes the tab, asking first if there are changes', async ({ page, menu }) => {
+test('Close Tab (Cmd/Ctrl+W) closes the tab, asking first if there are changes', async ({ page, menu }) => {
   await page.getByRole('tab', { name: 'Work Orders' }).click()
   await page.getByRole('rowheader', { name: '1', exact: true }).dblclick()
   await expect.poll(() => openTabs(page)).toEqual(['All work orders', '#1 · Doe'])
-  await menu('Close Work Order')
+  await menu('Close Tab')
   await expect.poll(() => openTabs(page)).toEqual(['All work orders'])
 
   // Delete on a focused line removes it (undoably), which leaves unsaved changes.
@@ -57,13 +57,13 @@ test('Close Work Order (Cmd/Ctrl+W) closes the tab, asking first if there are ch
   await expect(parts.getByRole('row')).toHaveCount(2)
   await expect(page.locator('header').getByText('Unsaved changes', { exact: true })).toBeVisible()
 
-  await menu('Close Work Order')
+  await menu('Close Tab')
   const ask = page.getByRole('alertdialog', { name: 'Discard changes to work order #1?' })
   await expect(ask).toBeVisible()
   await ask.getByRole('button', { name: 'Cancel' }).click()
   await menu('Undo')
   await expect(parts.getByRole('row')).toHaveCount(3)
-  await menu('Close Work Order')
+  await menu('Close Tab')
   await expect.poll(() => openTabs(page)).toEqual(['All work orders'])
 })
 

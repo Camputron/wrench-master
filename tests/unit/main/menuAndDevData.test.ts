@@ -1,6 +1,6 @@
 import type { MenuItemConstructorOptions } from 'electron'
 import { describe, expect, it, vi } from 'vitest'
-import { bill } from '../../../src/shared/billing'
+import { balance, bill } from '../../../src/shared/billing'
 import { createRepos } from '../../../src/main/db'
 import { dropDevData, runDevDbCommand, seedDemoData } from '../../../src/main/devData'
 import { buildMenu } from '../../../src/main/menu'
@@ -24,15 +24,17 @@ describe('application menu', () => {
 
   it.each([
     ['New Work Order', { type: 'newWorkOrder' }, 'CmdOrCtrl+N'],
+    ['New Estimate', { type: 'newEstimate' }, 'Shift+CmdOrCtrl+N'],
     ['New Customer…', { type: 'newCustomer' }, undefined],
-    ['Save Work Order', { type: 'save' }, 'CmdOrCtrl+S'],
-    ['Print Work Order…', { type: 'print' }, 'CmdOrCtrl+P'],
-    ['Close Work Order', { type: 'closeWorkOrder' }, 'CmdOrCtrl+W'],
+    ['Save', { type: 'save' }, 'CmdOrCtrl+S'],
+    ['Print…', { type: 'print' }, 'CmdOrCtrl+P'],
+    ['Close Tab', { type: 'closeTab' }, 'CmdOrCtrl+W'],
     ['Find', { type: 'find' }, 'CmdOrCtrl+F'],
     ['Undo', { type: 'undo' }, 'CmdOrCtrl+Z'],
     ['Dashboard', { type: 'navigate', page: 'dashboard' }, 'CmdOrCtrl+1'],
     ['Customers', { type: 'navigate', page: 'customers' }, 'CmdOrCtrl+2'],
-    ['Work Orders', { type: 'navigate', page: 'workOrders' }, 'CmdOrCtrl+3']
+    ['Work Orders', { type: 'navigate', page: 'workOrders' }, 'CmdOrCtrl+3'],
+    ['Estimates', { type: 'navigate', page: 'estimates' }, 'CmdOrCtrl+4']
   ])('%s sends %j (%s)', (label, action, accelerator) => {
     click(label)
     expect(handlers.send).toHaveBeenLastCalledWith(action)
@@ -46,8 +48,8 @@ describe('application menu', () => {
     expect(handlers.zoom.mock.calls).toEqual([[1], [-1], [0]])
     click('Import from Autoshop Invoice Manager…')
     expect(handlers.importFromJavaApp).toHaveBeenCalled()
-    for (const label of ['Customers…', 'Vehicles…', 'Work Orders…', 'Parts Catalog…']) click(label)
-    expect(handlers.exportData.mock.calls.flat()).toEqual(['customers', 'vehicles', 'workOrders', 'parts'])
+    for (const label of ['Customers…', 'Vehicles…', 'Work Orders…', 'Estimates…', 'Parts Catalog…']) click(label)
+    expect(handlers.exportData.mock.calls.flat()).toEqual(['customers', 'vehicles', 'workOrders', 'estimates', 'parts'])
     click('Back Up Now')
     expect(handlers.backUpNow).toHaveBeenCalled()
     click('Restore from Backup…')
@@ -70,6 +72,27 @@ describe('demo data', () => {
     expect(summary).toMatchObject({ customers: 28, parts: 13 })
     expect(summary.workOrders).toBeGreaterThan(200)
     expect(summary.open).toBe(stats.openCount)
+  })
+
+  it('includes estimates in every state, with accepted ones done as work orders', () => {
+    const r = createRepos(join(tempDir(), 'autoshop.db'))
+    const today = new Date(2026, 9, 27)
+    const { estimates: counts } = seedDemoData(r, 0.08625, 90, today)
+    const count = (status: 'open' | 'expired' | 'accepted' | 'declined'): number => r.estimates.filter({ status }, '2026-10-27').length
+    expect(counts.total).toBe(25)
+    expect({ open: count('open') - count('expired'), expired: count('expired'), accepted: count('accepted'), declined: count('declined') }).toEqual({
+      open: counts.open,
+      expired: counts.expired,
+      accepted: counts.accepted,
+      declined: counts.declined
+    })
+    for (const n of [counts.open, counts.expired, counts.accepted, counts.declined]) expect(n).toBeGreaterThan(0)
+    for (const e of r.estimates.filter({ status: 'accepted' })) {
+      const wo = r.workOrders.getById(e.workOrderId!)!
+      expect(wo.dateCompleted).not.toBeNull()
+      expect(balance(wo)).toBe(0)
+    }
+    r.db.close()
   })
 
   it('includes semi-filled, empty, and long work orders for checking invoices', () => {

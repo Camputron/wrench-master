@@ -10,7 +10,8 @@ interface Props {
   dateError: string | null
 }
 
-function Row({ label, value, strong, subtract }: { label: string; value: number; strong?: boolean; subtract?: boolean }): React.ReactElement {
+/** A label and amount in a totals list. */
+export function TotalRow({ label, value, strong, subtract }: { label: string; value: number; strong?: boolean; subtract?: boolean }): React.ReactElement {
   return (
     <div className={`flex justify-between gap-4 ${strong ? 'font-semibold' : 'text-sm'}`}>
       <dt className={strong ? undefined : 'text-muted'}>{label}</dt>
@@ -49,12 +50,12 @@ export default function SummaryPanel({ workOrder: wo, onChange, dateError }: Pro
       </div>
       <Separator />
       <dl className="flex flex-col gap-1.5">
-        <Row label="Parts" value={partsSubtotal(wo)} />
-        <Row label="Labor" value={laborsSubtotal(wo)} />
-        <Row label="Subtotal" value={subtotal(wo)} />
-        <Row label="Tax" value={tax(wo)} />
-        <Row label="Total" value={bill(wo)} strong />
-        <Row label="Payments" value={totalPayments(wo)} subtract />
+        <TotalRow label="Parts" value={partsSubtotal(wo)} />
+        <TotalRow label="Labor" value={laborsSubtotal(wo)} />
+        <TotalRow label="Subtotal" value={subtotal(wo)} />
+        <TotalRow label="Tax" value={tax(wo)} />
+        <TotalRow label="Total" value={bill(wo)} strong />
+        <TotalRow label="Payments" value={totalPayments(wo)} subtract />
         <div className={`flex justify-between gap-4 text-lg font-semibold ${due > 0.004 ? 'text-warning' : 'text-success'}`}>
           <dt>{due < -0.004 ? 'Overpaid' : 'Balance due'}</dt>
           <dd className="tabular-nums">{formatMoney(Math.abs(due) < 0.005 ? 0 : Math.abs(due))}</dd>
