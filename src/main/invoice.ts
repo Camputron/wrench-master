@@ -38,6 +38,8 @@ const STYLE = `
   @page { size: Letter; margin: 0.4in 0.45in; }
   * { box-sizing: border-box; }
   body { margin: 0; font: 9.5pt/1.3 -apple-system, "Segoe UI", system-ui, sans-serif; color: #111; background: #fff; }
+  /* The on-screen preview has no page margins, so pad it like the paper. Printing and PDFs use print media and skip this. */
+  @media screen { body { padding: 0.4in 0.45in; } }
   /* Fills the printable height (11in - 0.8in margins) so the totals sit at the bottom of the page. */
   .page { display: flex; flex-direction: column; min-height: 10.15in; }
   header { display: flex; justify-content: space-between; gap: 16px; padding-bottom: 6px; border-bottom: 1.5px solid #111; }

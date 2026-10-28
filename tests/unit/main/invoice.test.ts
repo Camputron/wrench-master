@@ -55,6 +55,12 @@ describe('invoice HTML', () => {
     expect(html.indexOf('class="bottom"')).toBeGreaterThan(html.indexOf('class="lines"'))
   })
 
+  it('pads the on-screen preview like the paper, but only on screen', () => {
+    const html = invoiceHtml(wo, shop)
+    expect(html).toContain('@media screen { body { padding: 0.4in 0.45in; } }')
+    expect(html).toMatch(/@page \{[^}]*margin: 0\.4in 0\.45in/)
+  })
+
   it('labels unsaved work orders as drafts and leaves out an empty shop ID line', () => {
     expect(invoiceNumber({ ...wo, id: 0 })).toBe('Draft')
     expect(invoiceHtml({ ...wo, id: 0 }, shop)).toContain('Work order Draft')

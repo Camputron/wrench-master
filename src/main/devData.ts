@@ -93,12 +93,12 @@ export interface SeedSummary {
   open: number
   parts: number
   /** Work order numbers of the invoice examples (see addInvoiceExamples). */
-  invoiceExamples: { short: number; empty: number; long: number }
+  invoiceExamples: { semiFilled: number; empty: number; long: number }
 }
 
 /**
- * Three work orders created today for checking the printed invoice: a typical short one, one with no
- * lines yet, and a long one that runs onto a second page.
+ * Three work orders created today for checking the printed invoice: a semi-filled one that takes about
+ * half the page, one with no lines yet, and a long one that runs onto a second page.
  */
 function addInvoiceExamples(repos: Repos, owners: { customer: Customer; vehicles: Vehicle[] }[], taxRate: number, laborRate: number, today: Date): SeedSummary['invoiceExamples'] {
   const day = iso(today)
@@ -111,7 +111,8 @@ function addInvoiceExamples(repos: Repos, owners: { customer: Customer; vehicles
     const v = owner.vehicles[vehicleIndex % owner.vehicles.length]
     return { id: 0, dateCreated: day, customer: owner.customer, vehicle: { ...v, mileageIn: String(mileageIn), mileageOut: rest.dateCompleted ? String(mileageIn + 3) : '' }, taxRate, payments: [], ...rest }
   }
-  const pay = (wo: WorkOrder, amount: number): WorkOrder => repos.workOrders.save({ ...wo, payments: [{ id: 0, date: day, method: 'Credit', amount: Math.round(amount * 100) / 100 }] })
+  const cents = (amount: number): number => Math.round(amount * 100) / 100
+  const pay = (wo: WorkOrder, amount: number): WorkOrder => repos.workOrders.save({ ...wo, payments: [{ id: 0, date: day, method: 'Credit', amount: cents(amount) }] })
 
   // Long: a fleet van's full service, about 36 parts plus multi-line labor; partly paid.
   const fleet = owners.find((o) => o.customer.company) ?? owners[0]
@@ -127,17 +128,25 @@ function addInvoiceExamples(repos: Repos, owners: { customer: Customer; vehicles
   // Empty: checked in, nothing added yet.
   const empty = repos.workOrders.save(workOrder(owners[1], 0, 88_400, { dateCompleted: null, parts: [], labor: [] }))
 
-  // Short: a typical oil change, paid in full.
-  const short = repos.workOrders.save(workOrder(owners[2], 0, 42_015, { dateCompleted: day, parts: [part(2), part(3)], labor: [labor('Oil and filter change', 0.5)] }))
-  pay(short, bill(short))
+  // Semi-filled: a brake job and tune-up that fills about half the page; a cash deposit, the rest on card.
+  const semiParts = [part(0), part(1), part(2), part(3), part(4), part(5), part(8, 4), part(9), part(10), part(11)]
+  const semiLabor = [labor('Front brake service:\nreplace pads and rotors', 1.5, 'BRK'), labor('Tune-up: spark plugs, air and cabin filters', 1), labor('Oil and filter change', 0.5)]
+  const semi = repos.workOrders.save(workOrder(owners[2], 0, 42_015, { dateCompleted: day, parts: semiParts, labor: semiLabor }))
+  repos.workOrders.save({
+    ...semi,
+    payments: [
+      { id: 0, date: day, method: 'Cash', amount: 200 },
+      { id: 0, date: day, method: 'Credit', amount: cents(bill(semi) - 200) }
+    ]
+  })
 
-  return { short: short.id, empty: empty.id, long: long.id }
+  return { semiFilled: semi.id, empty: empty.id, long: long.id }
 }
 
 export function seedDemoData(repos: Repos, taxRate: number, laborRate: number, today = new Date()): SeedSummary {
   const r = makeRandom(20260601)
   const owners: { customer: Customer; vehicles: Vehicle[] }[] = []
-  let summary: SeedSummary = { customers: 0, vehicles: 0, workOrders: 0, open: 0, parts: 0, invoiceExamples: { short: 0, empty: 0, long: 0 } }
+  let summary: SeedSummary = { customers: 0, vehicles: 0, workOrders: 0, open: 0, parts: 0, invoiceExamples: { semiFilled: 0, empty: 0, long: 0 } }
 
   repos.db.transaction(() => {
     for (const [desc, name, retailPrice, listPrice, taxable] of PARTS) repos.parts.remember({ name, desc, retailPrice, listPrice, quantity: 1, taxable })
@@ -256,11 +265,11 @@ export function runDevDbCommand(action: DevDbAction, dataDir: string, settings: 
       return 1
     }
     const s = seedDemoData(repos, settings.taxRate, settings.laborRate)
-    // Put the invoice examples on the dashboard's "Recently saved" list, short one on top.
+    // Put the invoice examples on the dashboard's "Recently saved" list, semi-filled one on top.
     const session = new SessionStore(join(dataDir, 'session.json'))
-    for (const id of [s.invoiceExamples.long, s.invoiceExamples.empty, s.invoiceExamples.short]) session.addRecent(id)
+    for (const id of [s.invoiceExamples.long, s.invoiceExamples.empty, s.invoiceExamples.semiFilled]) session.addRecent(id)
     console.log(`Seeded the dev database: ${s.customers} customers, ${s.vehicles} vehicles, ${s.workOrders} work orders (${s.open} open), ${s.parts} catalog parts.`)
-    console.log(`Invoice examples (also under "Recently saved" on the dashboard): #${s.invoiceExamples.short} short, #${s.invoiceExamples.empty} empty, #${s.invoiceExamples.long} long (two pages).`)
+    console.log(`Invoice examples (also under "Recently saved" on the dashboard): #${s.invoiceExamples.semiFilled} semi-filled, #${s.invoiceExamples.empty} empty, #${s.invoiceExamples.long} long (two pages).`)
     console.log(`Location: ${join(dataDir, 'autoshop.db')}`)
     return 0
   } finally {

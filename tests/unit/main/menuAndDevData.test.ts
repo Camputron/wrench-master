@@ -66,14 +66,14 @@ describe('demo data', () => {
     expect(summary.open).toBe(stats.openCount)
   })
 
-  it('includes short, empty, and long work orders for checking invoices', () => {
+  it('includes semi-filled, empty, and long work orders for checking invoices', () => {
     const r = createRepos(join(tempDir(), 'autoshop.db'))
     const today = new Date(2026, 9, 27)
     const { invoiceExamples } = seedDemoData(r, 0.08625, 90, today)
-    const [short, empty, long] = [invoiceExamples.short, invoiceExamples.empty, invoiceExamples.long].map((id) => r.workOrders.getById(id)!)
-    for (const wo of [short, empty, long]) expect(wo.dateCreated).toBe('2026-10-27')
-    expect([short.parts.length, short.labor.length]).toEqual([2, 1])
-    expect(bill(short) - short.payments.reduce((s, p) => s + p.amount, 0)).toBeCloseTo(0, 2)
+    const [semi, empty, long] = [invoiceExamples.semiFilled, invoiceExamples.empty, invoiceExamples.long].map((id) => r.workOrders.getById(id)!)
+    for (const wo of [semi, empty, long]) expect(wo.dateCreated).toBe('2026-10-27')
+    expect([semi.parts.length, semi.labor.length, semi.payments.length]).toEqual([10, 3, 2])
+    expect(bill(semi) - semi.payments.reduce((s, p) => s + p.amount, 0)).toBeCloseTo(0, 2)
     expect([empty.parts, empty.labor, empty.payments, empty.dateCompleted]).toEqual([[], [], [], null])
     expect(long.parts.length).toBe(36)
     expect(long.labor.some((l) => l.desc.includes('\n'))).toBe(true)
@@ -101,8 +101,8 @@ describe('demo data', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
     const settings = { taxRate: 0.08625, laborRate: 90 }
     expect(runDevDbCommand('seed', dir, settings)).toBe(0)
-    // The invoice examples are on the dashboard's recent list, short one first.
-    expect(log).toHaveBeenCalledWith(expect.stringMatching(/^Invoice examples .*#\d+ short, #\d+ empty, #\d+ long/))
+    // The invoice examples are on the dashboard's recent list, semi-filled one first.
+    expect(log).toHaveBeenCalledWith(expect.stringMatching(/^Invoice examples .*#\d+ semi-filled, #\d+ empty, #\d+ long/))
     const recent = JSON.parse(readFileSync(join(dir, 'session.json'), 'utf8')).recentWorkOrderIds
     expect(recent).toHaveLength(3)
     expect(runDevDbCommand('seed', dir, settings)).toBe(1)
