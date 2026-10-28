@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="1024" height="1024">
+  <!--
+    Wrench Master app icon: a vector redraw of the Java app's 32px icon (crossed wrench and screwdriver),
+    keeping its layout, colors, and bold outline so it stays sharp at every size.
+    Each tool is drawn twice: once stroked for the outline around its whole silhouette, then filled on top.
+  -->
+  <defs>
+    <g id="wrench">
+      <path d="M -123.57 -13.00 A 36 36 0 1 1 -123.57 13.00 L -94.00 13.00 A 13 13 0 0 0 -94.00 -13.00 Z" />
+      <path d="M 123.57 -13.00 A 36 36 0 1 0 123.57 13.00 L 94.00 13.00 A 13 13 0 0 1 94.00 -13.00 Z" />
+      <rect x="-72" y="-15" width="144" height="30" rx="6" />
+    </g>
+    <g id="screwdriver-metal">
+      <rect x="-14" y="-8" width="96" height="16" rx="6" />
+      <path d="M78 -8 C90 -17 106 -17 114 -9 C119 -4 119 4 114 9 C106 17 90 17 78 8 Z" />
+    </g>
+  </defs>
+  <g transform="translate(128 128) scale(1.08)" stroke-linejoin="round">
+    <!-- Wrench, top-left to bottom-right -->
+    <g transform="rotate(45)">
+      <use href="#wrench" fill="#141416" stroke="#141416" stroke-width="10" />
+      <use href="#wrench" fill="#B5BCC9" />
+      <rect x="-64" y="-9" width="128" height="6" rx="3" fill="#D3D7DF" />
+    </g>
+    <!-- Screwdriver, bottom-left (handle) to top-right (tip) -->
+    <g transform="rotate(-45)">
+      <use href="#screwdriver-metal" fill="#141416" stroke="#141416" stroke-width="10" />
+      <rect x="-14" y="-8" width="96" height="16" rx="6" fill="#B5BCC9" />
+      <path d="M78 -8 C90 -17 106 -17 114 -9 C119 -4 119 4 114 9 C106 17 90 17 78 8 Z" fill="#D3D7DF" stroke="#141416" stroke-width="5" />
+      <rect x="-8" y="-4" width="80" height="4" rx="2" fill="#D3D7DF" />
+      <rect x="-32" y="-19" width="22" height="38" rx="5" fill="#F2727E" stroke="#141416" stroke-width="10" paint-order="stroke" />
+      <rect x="-120" y="-25" width="90" height="50" rx="22" fill="#FFCB7C" stroke="#141416" stroke-width="10" paint-order="stroke" />
+      <rect x="-110" y="-15" width="70" height="7" rx="3.5" fill="#FFDCA6" />
+    </g>
+  </g>
+</svg>

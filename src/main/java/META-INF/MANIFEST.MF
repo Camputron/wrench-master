@@ -1,4 +1,0 @@
-Manifest-Version: 1.0
-Updater-Class: app.AppWrapper
-Main-Class: app.AppWrapper
-

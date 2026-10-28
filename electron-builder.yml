@@ -1,0 +1,47 @@
+appId: com.camposmdev.wrenchmaster
+productName: Wrench Master
+copyright: Copyright © 2026 Camposm97
+directories:
+  buildResources: build
+files:
+  # Ship only the built app; electron-builder adds production node_modules itself.
+  - out/**/*
+  - resources/**/*
+  - package.json
+  # better-sqlite3's C/C++ sources are only for compiling; the prebuilt binary is all it needs at runtime.
+  - '!node_modules/better-sqlite3/{deps,src}/**'
+asarUnpack:
+  - resources/**
+# Removes better-sqlite3 binaries for other platforms (see the file).
+afterPack: build/afterPack.cjs
+win:
+  executableName: wrench-master
+  target:
+    - target: nsis
+      arch: [x64]
+nsis:
+  artifactName: ${name}-${version}-setup.${ext}
+  shortcutName: ${productName}
+  uninstallDisplayName: ${productName}
+  createDesktopShortcut: always
+  # Keep the shop's data (database, settings) if the app is uninstalled.
+  deleteAppDataOnUninstall: false
+mac:
+  category: public.app-category.business
+  entitlementsInherit: build/entitlements.mac.plist
+  target:
+    - target: dmg
+      arch: [arm64, x64]
+  notarize: false
+dmg:
+  artifactName: ${name}-${version}-${arch}.${ext}
+linux:
+  target:
+    - AppImage
+    - deb
+  maintainer: Camposm97
+  category: Office
+appImage:
+  artifactName: ${name}-${version}.${ext}
+# better-sqlite3 ships prebuilt binaries for every platform, so nothing needs rebuilding per target.
+npmRebuild: false
